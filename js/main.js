@@ -2,7 +2,7 @@
 // LILONGWE SCHOOL MAPPING SYSTEM
 // LEAFLET VERSION WITH LOGGING + LOADING
 // =========================================
-const BUILD = "2026-10-31 esri-tiles";
+const BUILD = "2026-10-31 tiles-v3";
 console.log("main.js build:", BUILD);
 
 let map;
@@ -93,19 +93,7 @@ function initMap() {
             attribution: attrOSM, maxZoom: 19, minZoom: 10
         }),
         "Streets (Esri)": esriLayer('World_Street_Map', 19),
-        "Light": L.layerGroup([
-            esriLayer('Canvas/World_Light_Gray_Base', 16),
-            esriLayer('Canvas/World_Light_Gray_Reference', 16)
-        ]),
-        "Dark": L.layerGroup([
-            esriLayer('Canvas/World_Dark_Gray_Base', 16),
-            esriLayer('Canvas/World_Dark_Gray_Reference', 16)
-        ]),
         "Satellite": esriLayer('World_Imagery', 18),
-        "Satellite + Labels": L.layerGroup([
-            esriLayer('World_Imagery', 18),
-            esriLayer('Reference/World_Boundaries_and_Places', 18)
-        ]),
         "Terrain (Topographic)": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
             subdomains: 'abc', maxZoom: 19, maxNativeZoom: 17, minZoom: 10
