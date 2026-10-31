@@ -2,7 +2,7 @@
 // LILONGWE SCHOOL MAPPING SYSTEM
 // LEAFLET VERSION WITH LOGGING + LOADING
 // =========================================
-const BUILD = "2026-11-01 hover-details";
+const BUILD = "2026-11-01 hover-details-v2";
 console.log("main.js build:", BUILD);
 
 let map;
