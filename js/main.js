@@ -2,6 +2,9 @@
 // LILONGWE SCHOOL MAPPING SYSTEM
 // LEAFLET VERSION WITH LOGGING + LOADING
 // =========================================
+const BUILD = "2026-10-31 esri-tiles";
+console.log("main.js build:", BUILD);
+
 let map;
 let schoolMarkers = [];
 
