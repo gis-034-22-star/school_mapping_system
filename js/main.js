@@ -2,7 +2,7 @@
 // LILONGWE SCHOOL MAPPING SYSTEM
 // LEAFLET VERSION WITH LOGGING + LOADING
 // =========================================
-const BUILD = "2026-10-31 tiles-v3";
+const BUILD = "2026-11-01 hover-details";
 console.log("main.js build:", BUILD);
 
 let map;
@@ -237,6 +237,14 @@ function addSchoolMarker(school) {
 
     marker.bindPopup(buildPopupContent(school, idx));
 
+    // Hovering (or tapping on a phone) shows the school details
+    marker.bindTooltip(buildPopupContent(school, idx), {
+        direction: "top",
+        offset: [0, -10],
+        opacity: 0.97
+    });
+    marker.on("popupopen", () => marker.closeTooltip());
+
     // Clicking a school goes straight to directions
     marker.on('click', function () {
         logStep("SCHOOL_MARKER_CLICKED", school.name);
@@ -261,12 +269,17 @@ function addSchoolMarker(school) {
 // BUILD POPUP CONTENT
 // =========================================
 function buildPopupContent(school, idx) {
+    const lat = Number(school.latitude).toFixed(6);
+    const lng = Number(school.longitude).toFixed(6);
+
     return `
-        <div style="min-width:200px">
-            <h6 class="fw-bold mb-1">${school.name}</h6>
-            <p class="mb-0 small text-muted">
-                ${school.level} &middot; ${school.ownership}
-            </p>
+        <div style="min-width:210px">
+            <div class="fw-bold mb-1">${escapeHtml(school.name)}</div>
+            <hr class="my-1">
+            <div class="small"><strong>Level:</strong> ${escapeHtml(school.level)}</div>
+            <div class="small"><strong>Ownership:</strong> ${escapeHtml(school.ownership)}</div>
+            <div class="small"><strong>Type:</strong> ${escapeHtml(school.type)}</div>
+            <div class="small"><strong>Coordinates:</strong> ${lat}, ${lng}</div>
         </div>
     `;
 }
