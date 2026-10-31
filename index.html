@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <!-- Basic HTML5 settings -->
+    <meta charset="UTF-8">
+
+    <!-- Makes the system responsive on phones/tablets -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Website title -->
+    <title>Lilongwe School Mapping System</title>
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Leaflet CSS -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
+
+    <!-- Leaflet Routing Machine CSS -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+
+    <!-- Our own CSS -->
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+
+    <!-- ============================= -->
+    <!-- NAVIGATION BAR -->
+    <!-- ============================= -->
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+
+        <div class="container-fluid">
+
+            <!-- System name -->
+            <a class="navbar-brand fw-bold" href="index.html">
+
+                <i class="bi bi-geo-alt-fill"></i>
+
+                Lilongwe School GIS
+
+            </a>
+
+
+            <!-- Mobile menu button -->
+            <button
+                class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#mainNavbar">
+
+                <span class="navbar-toggler-icon"></span>
+
+            </button>
+
+
+            <!-- Navigation links -->
+            <div class="collapse navbar-collapse" id="mainNavbar">
+
+                <ul class="navbar-nav ms-auto">
+
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.html">
+                            <i class="bi bi-map"></i>
+                            Map
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/schools.html">
+                            <i class="bi bi-building"></i>
+                            Schools
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/dashboard.html">
+                            <i class="bi bi-bar-chart-fill"></i>
+                            Dashboard
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/about.html">
+                            <i class="bi bi-info-circle"></i>
+                            About
+                        </a>
+                    </li>
+
+                </ul>
+
+            </div>
+
+        </div>
+
+    </nav>
+
+
+    <!-- ============================= -->
+    <!-- MAIN CONTENT -->
+    <!-- ============================= -->
+
+    <main class="container-fluid">
+
+        <div class="row g-0">
+
+
+            <!-- ============================= -->
+            <!-- LEFT SIDEBAR -->
+            <!-- ============================= -->
+
+            <aside class="col-lg-3 sidebar">
+
+                <div class="p-3">
+
+                    <h5 class="fw-bold">
+
+                        <i class="bi bi-search"></i>
+
+                        Find a School
+
+                    </h5>
+
+
+                    <!-- Search box -->
+                    <div class="input-group mb-1">
+
+                        <input
+                            type="text"
+                            id="schoolSearch"
+                            class="form-control"
+                            list="schoolNames"
+                            autocomplete="off"
+                            placeholder="Search school by name...">
+
+                        <button
+                            id="schoolSearchBtn"
+                            class="btn btn-primary"
+                            type="button"
+                            title="Go to school">
+
+                            <i class="bi bi-search"></i>
+
+                        </button>
+
+                    </div>
+
+                    <datalist id="schoolNames"></datalist>
+
+                    <div id="schoolSearchMsg" class="small text-muted mb-3"></div>
+
+
+                    <!-- School level -->
+                    <label class="form-label fw-bold">
+                        School Level
+                    </label>
+
+                    <select id="schoolLevel" class="form-select mb-3">
+
+                        <option value="all">
+                            All Levels
+                        </option>
+
+                        <option value="primary">
+                            Primary
+                        </option>
+
+                        <option value="secondary">
+                            Secondary
+                        </option>
+
+                    </select>
+
+
+                    <!-- Ownership -->
+                    <label class="form-label fw-bold">
+                        Ownership
+                    </label>
+
+                    <select id="ownership" class="form-select mb-3">
+
+                        <option value="all">
+                            All Schools
+                        </option>
+
+                        <option value="public">
+                            Public
+                        </option>
+
+                        <option value="private">
+                            Private
+                        </option>
+
+                    </select>
+
+
+                    <!-- Location button -->
+                    <button
+                        id="locationButton"
+                        class="btn btn-success w-100 mb-2">
+
+                        <i class="bi bi-crosshair"></i>
+
+                        My Location
+
+                    </button>
+
+
+                    <!-- Nearest school -->
+                    <button
+                        id="nearestButton"
+                        class="btn btn-outline-primary w-100 mb-3">
+
+                        <i class="bi bi-signpost-2"></i>
+
+                        Find Nearest School
+
+                    </button>
+
+
+                    <hr>
+
+
+                    <!-- ============================= -->
+                    <!-- ROUTE PLANNER (click start + destination) -->
+                    <!-- ============================= -->
+
+                    <h6 class="fw-bold">
+
+                        <i class="bi bi-sign-turn-right"></i>
+
+                        Route Planner
+
+                    </h6>
+
+                    <p class="small text-muted mb-2">
+                        Click <b>Start</b>, then click the map to set the start point.
+                        Then click <b>Destination</b> and click the map again.
+                        Finally press Get Directions.
+                    </p>
+
+                    <div class="input-group input-group-sm mb-2">
+                        <button id="pickStartBtn" class="btn btn-outline-success fw-bold" type="button" title="Click the map to set the start">Start</button>
+                        <input id="startInput" type="text" class="form-control" placeholder="Click the map to set start" readonly>
+                        <button id="startMyLocBtn" class="btn btn-outline-secondary" type="button" title="Use my location as start">
+                            <i class="bi bi-crosshair"></i>
+                        </button>
+                    </div>
+
+                    <div class="input-group input-group-sm mb-2">
+                        <button id="pickDestBtn" class="btn btn-outline-danger fw-bold" type="button" title="Click the map to set the destination">Destination</button>
+                        <input id="destInput" type="text" class="form-control" placeholder="Click the map to set destination" readonly>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-3">
+                        <button id="getDirectionsBtn" class="btn btn-primary btn-sm flex-grow-1" type="button">
+                            <i class="bi bi-sign-turn-right"></i> Get Directions
+                        </button>
+                        <button id="clearRouteBtn" class="btn btn-outline-secondary btn-sm" type="button">
+                            Clear
+                        </button>
+                    </div>
+
+
+                    <hr>
+
+
+                    <!-- ============================= -->
+                    <!-- NEARBY SCHOOLS SEARCH -->
+                    <!-- ============================= -->
+
+                    <h6 class="fw-bold">
+
+                        <i class="bi bi-geo"></i>
+
+                        Nearby Schools Search
+
+                    </h6>
+
+                    <!-- Address / place search -->
+                    <div class="input-group input-group-sm mb-2">
+
+                        <input
+                            type="text"
+                            id="locationSearchInput"
+                            class="form-control"
+                            placeholder="Enter address or place">
+
+                        <button
+                            id="locationSearchBtn"
+                            class="btn btn-primary"
+                            type="button">
+
+                            <i class="bi bi-search"></i>
+
+                        </button>
+
+                    </div>
+
+
+                    <!-- Radius selector -->
+                    <label class="form-label fw-bold small">
+                        Search Radius
+                    </label>
+
+                    <select id="radiusSelect" class="form-select form-select-sm mb-3">
+
+                        <option value="0.25">1/4 mile</option>
+                        <option value="0.5">1/2 mile</option>
+                        <option value="1" selected>1 mile</option>
+                        <option value="1.5">1.5 miles</option>
+                        <option value="2">2 miles</option>
+                        <option value="2.5">2.5 miles</option>
+                        <option value="3">3 miles</option>
+                        <option value="4">4 miles</option>
+                        <option value="5">5 miles</option>
+                        <option value="6">6 miles</option>
+                        <option value="10">10 miles</option>
+
+                    </select>
+
+
+                    <p class="small text-muted mb-3">
+                        Results appear on the map. Search an address or use
+                        "My Location" to find nearby schools.
+                    </p>
+
+
+                    <hr>
+
+
+                    <!-- System information -->
+                    <h6 class="fw-bold">
+
+                        <i class="bi bi-info-circle"></i>
+
+                        System Information
+
+                    </h6>
+
+                    <p class="small text-muted">
+
+                        Interactive GIS-based school mapping
+                        system for Lilongwe Urban, Malawi.
+
+                    </p>
+
+
+                    <!-- Statistics -->
+                    <div class="row text-center">
+
+                        <div class="col-6">
+
+                            <div class="stat-card">
+
+                                <h4 id="totalSchools">
+                                    0
+                                </h4>
+
+                                <small>
+                                    Schools
+                                </small>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="col-6">
+
+                            <div class="stat-card">
+
+                                <h4 id="visibleSchools">
+                                    0
+                                </h4>
+
+                                <small>
+                                    Visible
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </aside>
+
+
+            <!-- ============================= -->
+            <!-- MAP AREA -->
+            <!-- ============================= -->
+
+            <section class="col-lg-9 map-section">
+
+               <div id="map"></div>
+
+               <!-- Nearby / nearest schools pop-up shown on top of the map -->
+               <div id="nearbyPanel" class="nearby-panel d-none">
+
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+
+                        <div id="nearbyResultsHeader" class="small fw-bold"></div>
+
+                        <button
+                            id="closeNearbyBtn"
+                            type="button"
+                            class="btn-close"
+                            aria-label="Close results">
+                        </button>
+
+                    </div>
+
+                    <div id="nearbySchoolsResults" class="nearby-results-list"></div>
+
+               </div>
+
+               <!-- Directions pop-up shown on top of the map -->
+               <div id="directionsPanel" class="directions-panel d-none">
+
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+
+                        <div id="directionsTitle" class="small"></div>
+
+                        <button
+                            id="closeDirectionsBtn"
+                            type="button"
+                            class="btn-close"
+                            aria-label="Close directions">
+                        </button>
+
+                    </div>
+
+                    <div id="routeOptionsList"></div>
+
+               </div>
+
+
+            </section>
+
+        </div>
+
+    </main>
+
+
+    <!-- ============================= -->
+    <!-- LOADING INDICATOR -->
+    <!-- ============================= -->
+
+    <div id="loadingIndicator" class="d-none position-fixed top-50 start-50 translate-middle bg-white rounded shadow p-4" style="z-index: 10000; min-width: 300px;">
+        <div class="text-center">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p id="loadingMessage" class="text-muted mb-0">Loading...</p>
+        </div>
+    </div>
+
+
+    <!-- ============================= -->
+    <!-- FOOTER -->
+    <!-- ============================= -->
+
+    <footer class="bg-dark text-white text-center py-2">
+
+        <small>
+
+            © 2026 Lilongwe School Mapping System |
+
+            GIS Research Project
+
+        </small>
+
+    </footer>
+
+
+    <!-- Bootstrap JavaScript -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+    </script>
+
+    <!-- Leaflet JavaScript -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
+    </script>
+
+    <!-- Leaflet Routing Machine JavaScript -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.umd.js">
+    </script>
+
+    <!-- Our main JavaScript -->
+    <script src="js/main.js"></script>
+
+</body>
+
+</html>
