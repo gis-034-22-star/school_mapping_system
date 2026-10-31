@@ -70,34 +70,38 @@ function initMap() {
     map = L.map('map').setView(LILONGWE, 12);
 
     // ---- Base map options (switch with the layers button, top-right) ----
+    // All of these work without an API key.
     const attrOSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-    const attrCarto = attrOSM + ' &copy; <a href="https://carto.com/attributions">CARTO</a>';
     const attrEsri = 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community';
-    const esriImagery = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+    const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 
-    const carto = function (style) {
-        return L.tileLayer(
-            `https://{s}.basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}{r}.png`,
-            { attribution: attrCarto, subdomains: 'abcd', maxZoom: 19, minZoom: 10 }
-        );
+    // Esri tile helper (note: Esri URLs use {z}/{y}/{x})
+    const esriLayer = function (service, nativeZoom) {
+        return L.tileLayer(`${esri}${service}/MapServer/tile/{z}/{y}/{x}`, {
+            attribution: attrEsri,
+            maxZoom: 19,
+            maxNativeZoom: nativeZoom,
+            minZoom: 10
+        });
     };
 
     const baseLayers = {
         "OpenStreetMap": L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: attrOSM, maxZoom: 19, minZoom: 10
         }),
-        "Light": carto('light_all'),
-        "Dark": carto('dark_all'),
-        "Satellite": L.tileLayer(esriImagery, {
-            attribution: attrEsri, maxZoom: 19, maxNativeZoom: 18, minZoom: 10
-        }),
+        "Streets (Esri)": esriLayer('World_Street_Map', 19),
+        "Light": L.layerGroup([
+            esriLayer('Canvas/World_Light_Gray_Base', 16),
+            esriLayer('Canvas/World_Light_Gray_Reference', 16)
+        ]),
+        "Dark": L.layerGroup([
+            esriLayer('Canvas/World_Dark_Gray_Base', 16),
+            esriLayer('Canvas/World_Dark_Gray_Reference', 16)
+        ]),
+        "Satellite": esriLayer('World_Imagery', 18),
         "Satellite + Labels": L.layerGroup([
-            L.tileLayer(esriImagery, {
-                attribution: attrEsri, maxZoom: 19, maxNativeZoom: 18, minZoom: 10
-            }),
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}{r}.png', {
-                attribution: attrCarto, subdomains: 'abcd', maxZoom: 19, minZoom: 10
-            })
+            esriLayer('World_Imagery', 18),
+            esriLayer('Reference/World_Boundaries_and_Places', 18)
         ]),
         "Terrain (Topographic)": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
