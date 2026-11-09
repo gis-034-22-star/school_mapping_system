@@ -4,13 +4,60 @@
 (function () {
     const $ = id => document.getElementById(id);
 
-    const url = (window.SUPABASE_URL || "").replace(/\/+$/, "");
-    const key = window.SUPABASE_ANON_KEY || "";
+    // Accepts the URL however it was pasted and reduces it to https://<project-ref>.supabase.co
+    function normalizeSupabaseUrl(raw) {
+        let text = String(raw || "").trim().replace(/^["']+|["']+$/g, "");
+        if (!text) return "";
+        if (!/^https?:\/\//i.test(text)) text = "https://" + text;
+        try {
+            const u = new URL(text);
+            // Dashboard address pasted by mistake: https://supabase.com/dashboard/project/<ref>
+            const m = u.pathname.match(/\/project\/([a-z0-9]+)/i);
+            if (/(^|\.)supabase\.com$/i.test(u.hostname) && m) {
+                return "https://" + m[1] + ".supabase.co";
+            }
+            return u.origin;   // drops any extra path such as /rest/v1/ or /auth/v1
+        } catch (e) {
+            return "";
+        }
+    }
 
-    if (!url || !key || !window.supabase) {
-        $("setupWarning").classList.remove("d-none");
+    const url = normalizeSupabaseUrl(window.SUPABASE_URL);
+    const key = String(window.SUPABASE_ANON_KEY || "").trim().replace(/^["']+|["']+$/g, "");
+
+    function warn(html) {
+        const box = $("setupWarning");
+        box.innerHTML = html;
+        box.classList.remove("d-none");
+    }
+
+    if (!url || !key) {
+        warn(
+            "<strong>js/config.js has no Supabase settings.</strong> " +
+            "Paste your Project URL and anon public key between the quotes, save, and upload the file. " +
+            "If you already did, your browser may be showing an old copy: press <b>Ctrl + Shift + R</b>, " +
+            "and check that <code>config.js</code> is inside the <code>js</code> folder on GitHub."
+        );
         return;
     }
+
+    // The Supabase library normally loads from the page; if that failed, try a second source.
+    if (window.supabase) {
+        start();
+    } else {
+        const fallback = document.createElement("script");
+        fallback.src = "https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js";
+        fallback.onload = function () {
+            if (window.supabase) start();
+            else warn("<strong>Could not load the Supabase library.</strong> Check your internet connection and reload.");
+        };
+        fallback.onerror = function () {
+            warn("<strong>Could not load the Supabase library.</strong> Check your internet connection (or disable ad blockers for this page) and reload.");
+        };
+        document.head.appendChild(fallback);
+    }
+
+    function start() {
 
     const sb = window.supabase.createClient(url, key);
 
@@ -342,4 +389,5 @@
         a.click();
         URL.revokeObjectURL(a.href);
     });
+    }
 })();
