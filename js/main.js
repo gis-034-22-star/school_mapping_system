@@ -2,7 +2,7 @@
 // LILONGWE SCHOOL MAPPING SYSTEM
 // LEAFLET VERSION WITH LOGGING + LOADING
 // =========================================
-const BUILD = "2026-11-01 hover-details-v2";
+const BUILD = "2026-11-10 nearby-school-name";
 console.log("main.js build:", BUILD);
 
 let map;
@@ -235,10 +235,10 @@ function addSchoolMarker(school) {
         title: school.name
     }).addTo(map);
 
-    marker.bindPopup(buildPopupContent(school, idx));
+    marker.bindPopup(buildPopupContent(school, idx), { minWidth: 290, maxWidth: 300 });
 
     // Hovering (or tapping on a phone) shows the school details
-    marker.bindTooltip(buildPopupContent(school, idx), {
+    marker.bindTooltip(buildTooltipContent(school), {
         direction: "top",
         offset: [0, -10],
         opacity: 0.97
@@ -266,16 +266,78 @@ function addSchoolMarker(school) {
 }
 
 // =========================================
-// BUILD POPUP CONTENT
+// BUILD POPUP CONTENT (with picture)
 // =========================================
+// Aerial (satellite) picture of the school's exact location, from Esri imagery
+function satelliteImageUrl(school) {
+    const lat = Number(school.latitude);
+    const lng = Number(school.longitude);
+    const halfLat = 0.0007;              // about 80 m each side
+    const halfLng = halfLat * (280 / 160);
+    const bbox = [lng - halfLng, lat - halfLat, lng + halfLng, lat + halfLat].join(",");
+
+    return "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export" +
+        `?bbox=${bbox}&bboxSR=4326&imageSR=4326&size=280,160&format=jpg&f=image`;
+}
+
+// If a picture can't load: try the fallback, otherwise show a short message
+function schoolImageError(img) {
+    if (img.dataset.fallback) {
+        img.src = img.dataset.fallback;
+        img.dataset.fallback = "";
+        return;
+    }
+    img.onerror = null;
+    img.outerHTML =
+        '<div class="d-flex align-items-center justify-content-center text-muted small" ' +
+        'style="height:160px;background:#e9ecef">Picture not available</div>';
+}
+
+function buildSchoolImage(school) {
+    const satellite = satelliteImageUrl(school);
+    // Optional real photo: add  "image": "images/your-photo.jpg"  to the school in schools.json
+    const main = school.image ? school.image : satellite;
+    const fallback = school.image ? satellite : "";
+    const label = school.image ? "Photo" : "Satellite view";
+
+    return `
+        <div style="position:relative;width:280px;height:160px;background:#e9ecef;border-radius:6px;overflow:hidden" class="mb-2">
+            <img src="${escapeHtml(main)}"
+                 data-fallback="${escapeHtml(fallback)}"
+                 alt="${escapeHtml(school.name)}"
+                 width="280" height="160"
+                 style="display:block;width:280px;height:160px;object-fit:cover"
+                 onerror="schoolImageError(this)">
+            <span style="position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:1px 6px;border-radius:4px">${label}</span>
+        </div>
+    `;
+}
+
 function buildPopupContent(school, idx) {
     const lat = Number(school.latitude).toFixed(6);
     const lng = Number(school.longitude).toFixed(6);
 
     return `
-        <div style="min-width:210px">
+        <div style="width:280px">
+            ${buildSchoolImage(school)}
             <div class="fw-bold mb-1">${escapeHtml(school.name)}</div>
             <hr class="my-1">
+            <div class="small"><strong>Level:</strong> ${escapeHtml(school.level)}</div>
+            <div class="small"><strong>Ownership:</strong> ${escapeHtml(school.ownership)}</div>
+            <div class="small"><strong>Type:</strong> ${escapeHtml(school.type)}</div>
+            <div class="small"><strong>Coordinates:</strong> ${lat}, ${lng}</div>
+        </div>
+    `;
+}
+
+// Hover box: text only (no picture) so it stays light
+function buildTooltipContent(school) {
+    const lat = Number(school.latitude).toFixed(6);
+    const lng = Number(school.longitude).toFixed(6);
+
+    return `
+        <div style="min-width:200px">
+            <div class="fw-bold mb-1">${escapeHtml(school.name)}</div>
             <div class="small"><strong>Level:</strong> ${escapeHtml(school.level)}</div>
             <div class="small"><strong>Ownership:</strong> ${escapeHtml(school.ownership)}</div>
             <div class="small"><strong>Type:</strong> ${escapeHtml(school.type)}</div>
@@ -710,6 +772,14 @@ function setupEventListeners() {
     document.getElementById("locationSearchBtn")
         .addEventListener("click", handleLocationSearch);
 
+    document.getElementById("locationSearchInput")
+        .addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                handleLocationSearch();
+            }
+        });
+
     document.getElementById("locationButton")
         .addEventListener("click", handleMyLocation);
 
@@ -799,11 +869,16 @@ async function geocodeAddress(query) {
     showLoading(`Searching for "${query}"...`);
 
     try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
-        logStep("NOMINATIM_REQUEST", url);
+        const base = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+        logStep("NOMINATIM_REQUEST", base);
 
-        const response = await fetch(url);
-        const data = await response.json();
+        // Look in Malawi first, then anywhere
+        let response = await fetch(base + "&countrycodes=mw");
+        let data = await response.json();
+        if (data.length === 0) {
+            response = await fetch(base);
+            data = await response.json();
+        }
 
         if (data.length > 0) {
             const result = data[0];
@@ -834,24 +909,56 @@ async function geocodeAddress(query) {
 // =========================================
 // HANDLE LOCATION SEARCH
 // =========================================
+function findSchoolByName(text) {
+    const q = text.trim().toLowerCase();
+    if (!q || schoolMarkers.length === 0) return null;
+
+    const exact = schoolMarkers.filter(i => i.school.name.trim().toLowerCase() === q);
+    if (exact.length > 0) return exact[0];
+
+    const partial = schoolMarkers
+        .filter(i => i.school.name.toLowerCase().includes(q))
+        .sort((x, y) => {
+            const xs = x.school.name.toLowerCase().startsWith(q) ? 0 : 1;
+            const ys = y.school.name.toLowerCase().startsWith(q) ? 0 : 1;
+            return xs - ys || x.school.name.localeCompare(y.school.name);
+        });
+
+    return partial.length > 0 ? partial[0] : null;
+}
+
 async function handleLocationSearch() {
     const input = document.getElementById("locationSearchInput").value.trim();
 
     logStep("LOCATION_SEARCH_CLICKED", `Input: "${input}"`);
 
     if (!input) {
-        alert("Please enter an address or place.");
+        alert("Please enter a school name, address or place.");
         logError("LOCATION_SEARCH", "Input was empty");
         return;
     }
 
+    // 1) A school name: use that school as the search centre
+    const schoolItem = findSchoolByName(input);
+    if (schoolItem) {
+        const sc = schoolItem.school;
+        logStep("SEARCH_BY_SCHOOL_NAME", sc.name);
+
+        setSearchLocation(Number(sc.latitude), Number(sc.longitude), sc.name);
+        document.getElementById("locationSearchInput").value = sc.name;
+        map.setView([Number(sc.latitude), Number(sc.longitude)], Math.max(map.getZoom(), 14));
+        renderNearbySchools();
+        return;
+    }
+
+    // 2) Otherwise treat it as an address / place
     const result = await geocodeAddress(input);
     if (result) {
         setSearchLocation(result.lat, result.lng, result.label);
         document.getElementById("locationSearchInput").value = result.label;
         renderNearbySchools();
     } else {
-        alert("Could not find location: " + input);
+        alert('Could not find "' + input + '". Try a school name from the suggestions, or a place in Lilongwe (for example "Area 25, Lilongwe").');
         logError("LOCATION_SEARCH", "Geocoding failed");
     }
 }
