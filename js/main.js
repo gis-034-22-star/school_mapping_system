@@ -2,7 +2,7 @@
 // LILONGWE SCHOOL MAPPING SYSTEM
 // LEAFLET VERSION WITH LOGGING + LOADING
 // =========================================
-const BUILD = "2026-11-10 nearby-school-name";
+const BUILD = "2026-11-10 supabase";
 console.log("main.js build:", BUILD);
 
 let map;
@@ -121,8 +121,7 @@ async function loadSchools() {
     logStep("LOAD_SCHOOLS", "Fetching schools.json");
 
     try {
-        const response = await fetch("data/schools.json");
-        const schools = await response.json();
+        const schools = await loadSchoolsData("data/schools.json");
         logSuccess("SCHOOLS_LOADED", `${schools.length} schools fetched`);
 
         document.getElementById("totalSchools").textContent = schools.length;

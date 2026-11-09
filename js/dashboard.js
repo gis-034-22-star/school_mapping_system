@@ -5,8 +5,7 @@ document.addEventListener("DOMContentLoaded", loadDashboard);
 
 async function loadDashboard() {
     try {
-        const response = await fetch("../data/schools.json");
-        const schools = await response.json();
+        const schools = await loadSchoolsData("../data/schools.json");
 
         renderStatCards(schools);
         renderLevelChart(schools);

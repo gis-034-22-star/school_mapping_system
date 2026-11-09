@@ -14,8 +14,7 @@ document.addEventListener("DOMContentLoaded", function () {
 // =========================================
 async function loadSchoolsTable() {
     try {
-        const response = await fetch("../data/schools.json");
-        allSchools = await response.json();
+        allSchools = await loadSchoolsData("../data/schools.json");
         renderTable();
     } catch (error) {
         console.error("Error loading school data:", error);
