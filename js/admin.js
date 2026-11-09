@@ -1,393 +1,258 @@
-// =========================================
-// ADMIN PAGE (Supabase login + add / update / delete schools)
-// =========================================
-(function () {
-    const $ = id => document.getElementById(id);
+<!DOCTYPE html>
+<html lang="en">
 
-    // Accepts the URL however it was pasted and reduces it to https://<project-ref>.supabase.co
-    function normalizeSupabaseUrl(raw) {
-        let text = String(raw || "").trim().replace(/^["']+|["']+$/g, "");
-        if (!text) return "";
-        if (!/^https?:\/\//i.test(text)) text = "https://" + text;
-        try {
-            const u = new URL(text);
-            // Dashboard address pasted by mistake: https://supabase.com/dashboard/project/<ref>
-            const m = u.pathname.match(/\/project\/([a-z0-9]+)/i);
-            if (/(^|\.)supabase\.com$/i.test(u.hostname) && m) {
-                return "https://" + m[1] + ".supabase.co";
-            }
-            return u.origin;   // drops any extra path such as /rest/v1/ or /auth/v1
-        } catch (e) {
-            return "";
-        }
-    }
+<head>
 
-    const url = normalizeSupabaseUrl(window.SUPABASE_URL);
-    const key = String(window.SUPABASE_ANON_KEY || "").trim().replace(/^["']+|["']+$/g, "");
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
 
-    function warn(html) {
-        const box = $("setupWarning");
-        box.innerHTML = html;
-        box.classList.remove("d-none");
-    }
+    <title>Admin | Lilongwe School Mapping System</title>
 
-    if (!url || !key) {
-        warn(
-            "<strong>js/config.js has no Supabase settings.</strong> " +
-            "Paste your Project URL and anon public key between the quotes, save, and upload the file. " +
-            "If you already did, your browser may be showing an old copy: press <b>Ctrl + Shift + R</b>, " +
-            "and check that <code>config.js</code> is inside the <code>js</code> folder on GitHub."
-        );
-        return;
-    }
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
 
-    // The Supabase library normally loads from the page; if that failed, try a second source.
-    if (window.supabase) {
-        start();
-    } else {
-        const fallback = document.createElement("script");
-        fallback.src = "https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js";
-        fallback.onload = function () {
-            if (window.supabase) start();
-            else warn("<strong>Could not load the Supabase library.</strong> Check your internet connection and reload.");
-        };
-        fallback.onerror = function () {
-            warn("<strong>Could not load the Supabase library.</strong> Check your internet connection (or disable ad blockers for this page) and reload.");
-        };
-        document.head.appendChild(fallback);
-    }
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    function start() {
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
 
-    const sb = window.supabase.createClient(url, key);
+    <style>
+        #pickMap { height: 260px; border-radius: 6px; }
+        .table-wrap { max-height: 65vh; overflow-y: auto; }
+        .table-wrap thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+    </style>
 
-    let schools = [];
-    let editingId = null;
-    let modal = null;
-    let pickMap = null;
-    let pickMarker = null;
+</head>
 
-    const NO_PERMISSION =
-        "Your account is not an authorised administrator, so this change was not saved. " +
-        "Ask the system owner to add your email to the admins list.";
+<body class="bg-light">
 
-    // ---------- helpers ----------
-    function say(el, text, cls) {
-        el.textContent = text || "";
-        el.className = "small " + (cls || "");
-    }
+    <!-- ============================= -->
+    <!-- NAVBAR -->
+    <!-- ============================= -->
 
-    function isPermissionError(error) {
-        if (!error) return false;
-        const m = (error.message || "").toLowerCase();
-        return error.code === "42501" || m.includes("row-level security") || m.includes("permission");
-    }
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
 
-    // ---------- login / logout ----------
-    function showLogin() {
-        $("loginCard").classList.remove("d-none");
-        $("adminPanel").classList.add("d-none");
-        $("userEmail").classList.add("d-none");
-        $("signOutBtn").classList.add("d-none");
-    }
+            <span class="navbar-brand">
+                <i class="bi bi-shield-lock"></i>
+                Lilongwe School GIS &ndash; Admin
+            </span>
 
-    async function showPanel(user) {
-        $("loginCard").classList.add("d-none");
-        $("adminPanel").classList.remove("d-none");
-        $("userEmail").textContent = user.email || "";
-        $("userEmail").classList.remove("d-none");
-        $("signOutBtn").classList.remove("d-none");
-        await loadSchools();
-    }
+            <div class="d-flex align-items-center gap-2">
+                <a href="index.html" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-map"></i> Back to map
+                </a>
+                <span id="userEmail" class="text-white-50 small d-none"></span>
+                <button id="signOutBtn" class="btn btn-outline-warning btn-sm d-none" type="button">
+                    <i class="bi bi-box-arrow-right"></i> Sign out
+                </button>
+            </div>
 
-    $("loginForm").addEventListener("submit", async function (e) {
-        e.preventDefault();
-        const email = $("loginEmail").value.trim();
-        const password = $("loginPassword").value;
+        </div>
+    </nav>
 
-        if (!email || !password) {
-            say($("loginMsg"), "Enter your email and password.", "text-danger");
-            return;
-        }
 
-        $("loginBtn").disabled = true;
-        say($("loginMsg"), "Signing in...", "text-muted");
+    <main class="container py-4">
 
-        const { error } = await sb.auth.signInWithPassword({ email, password });
+        <!-- Shown when js/config.js is still empty -->
+        <div id="setupWarning" class="alert alert-warning d-none">
+            <strong>Supabase is not set up yet.</strong>
+            Open <code>js/config.js</code> and paste your Supabase <em>Project URL</em> and
+            <em>anon public key</em>, then reload this page. See <code>supabase/SETUP.md</code>.
+        </div>
 
-        $("loginBtn").disabled = false;
-        if (error) {
-            say($("loginMsg"), "Sign-in failed: " + error.message, "text-danger");
-            return;
-        }
-        say($("loginMsg"), "");
-        $("loginPassword").value = "";
-    });
 
-    $("signOutBtn").addEventListener("click", async function () {
-        await sb.auth.signOut();
-    });
+        <!-- ============================= -->
+        <!-- LOGIN -->
+        <!-- ============================= -->
 
-    let panelUserId = null;
+        <div id="loginCard" class="card shadow-sm mx-auto d-none" style="max-width: 420px;">
+            <div class="card-body p-4">
 
-    sb.auth.onAuthStateChange(function (_event, session) {
-        if (session && session.user) {
-            if (panelUserId === session.user.id) return;   // e.g. token refresh: nothing to redo
-            panelUserId = session.user.id;
-            // run outside the callback (supabase-js must not be awaited inside it)
-            setTimeout(() => showPanel(session.user), 0);
-        } else {
-            panelUserId = null;
-            showLogin();
-        }
-    });
+                <h5 class="fw-bold mb-1">Administrator login</h5>
+                <p class="text-muted small">Only authorised administrators can add, update or delete school records.</p>
 
-    sb.auth.getSession().then(function ({ data }) {
-        if (!data.session) showLogin();
-    });
+                <form id="loginForm" novalidate>
 
-    // ---------- load + render ----------
-    async function loadSchools() {
-        say($("panelMsg"), "Loading schools...", "text-muted");
+                    <div class="mb-3">
+                        <label for="loginEmail" class="form-label">Email</label>
+                        <input id="loginEmail" type="email" class="form-control" autocomplete="username" required>
+                    </div>
 
-        const all = [];
-        let from = 0;
-        const size = 1000;
+                    <div class="mb-3">
+                        <label for="loginPassword" class="form-label">Password</label>
+                        <input id="loginPassword" type="password" class="form-control" autocomplete="current-password" required>
+                    </div>
 
-        while (true) {
-            const { data, error } = await sb
-                .from("schools")
-                .select("*")
-                .order("name", { ascending: true })
-                .range(from, from + size - 1);
+                    <div id="loginMsg" class="small text-danger mb-3"></div>
 
-            if (error) {
-                say($("panelMsg"), "Could not load schools: " + error.message, "text-danger");
-                return;
-            }
-            all.push(...data);
-            if (data.length < size) break;
-            from += size;
-        }
+                    <button id="loginBtn" type="submit" class="btn btn-primary w-100">Sign in</button>
 
-        schools = all;
-        say($("panelMsg"), "");
-        renderRows();
-    }
+                </form>
 
-    function renderRows() {
-        const text = $("filterText").value.trim().toLowerCase();
-        const level = $("filterLevel").value;
-        const owner = $("filterOwner").value;
+            </div>
+        </div>
 
-        const shown = schools.filter(s =>
-            (!text || s.name.toLowerCase().includes(text)) &&
-            (!level || s.level === level) &&
-            (!owner || s.ownership === owner)
-        );
 
-        $("countLabel").textContent = `${shown.length} of ${schools.length} schools`;
+        <!-- ============================= -->
+        <!-- ADMIN PANEL -->
+        <!-- ============================= -->
 
-        const body = $("schoolRows");
-        body.innerHTML = "";
+        <div id="adminPanel" class="d-none">
 
-        shown.forEach(function (s) {
-            const tr = document.createElement("tr");
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
 
-            [s.name, s.level, s.ownership, s.type || "", s.latitude, s.longitude].forEach(function (v) {
-                const td = document.createElement("td");
-                td.textContent = v;
-                tr.appendChild(td);
-            });
+                <input id="filterText" type="text" class="form-control" style="max-width: 260px;" placeholder="Search school name...">
 
-            const actions = document.createElement("td");
-            actions.className = "text-end text-nowrap";
+                <select id="filterLevel" class="form-select" style="max-width: 170px;">
+                    <option value="">All levels</option>
+                    <option>Primary School</option>
+                    <option>Secondary School</option>
+                </select>
 
-            const edit = document.createElement("button");
-            edit.type = "button";
-            edit.className = "btn btn-outline-primary btn-sm me-1";
-            edit.innerHTML = '<i class="bi bi-pencil"></i> Edit';
-            edit.addEventListener("click", () => openForm(s));
+                <select id="filterOwner" class="form-select" style="max-width: 150px;">
+                    <option value="">All ownership</option>
+                    <option>Public</option>
+                    <option>Private</option>
+                </select>
 
-            const del = document.createElement("button");
-            del.type = "button";
-            del.className = "btn btn-outline-danger btn-sm";
-            del.innerHTML = '<i class="bi bi-trash"></i> Delete';
-            del.addEventListener("click", () => deleteSchool(s));
+                <span id="countLabel" class="text-muted small"></span>
 
-            actions.append(edit, del);
-            tr.appendChild(actions);
-            body.appendChild(tr);
-        });
+                <div class="ms-auto d-flex gap-2">
+                    <button id="backupBtn" class="btn btn-outline-secondary" type="button">
+                        <i class="bi bi-download"></i> Backup (JSON)
+                    </button>
+                    <button id="addBtn" class="btn btn-success" type="button">
+                        <i class="bi bi-plus-lg"></i> Add school
+                    </button>
+                </div>
 
-        if (shown.length === 0) {
-            const tr = document.createElement("tr");
-            const td = document.createElement("td");
-            td.colSpan = 7;
-            td.className = "text-center text-muted py-4";
-            td.textContent = schools.length === 0
-                ? "No schools in the database yet. Run supabase/seed.sql or add a school."
-                : "No schools match your filters.";
-            tr.appendChild(td);
-            body.appendChild(tr);
-        }
-    }
+            </div>
 
-    ["filterText", "filterLevel", "filterOwner"].forEach(id =>
-        $(id).addEventListener("input", renderRows));
+            <div id="panelMsg" class="small mb-2"></div>
 
-    // ---------- add / edit form ----------
-    modal = new bootstrap.Modal($("schoolModal"));
+            <div class="card shadow-sm">
+                <div class="table-wrap">
+                    <table class="table table-hover table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Level</th>
+                                <th>Ownership</th>
+                                <th>Type</th>
+                                <th>Latitude</th>
+                                <th>Longitude</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schoolRows"></tbody>
+                    </table>
+                </div>
+            </div>
 
-    function setPin(lat, lng, pan) {
-        if (!pickMap) return;
-        if (!pickMarker) {
-            pickMarker = L.marker([lat, lng], { draggable: true }).addTo(pickMap);
-            pickMarker.on("dragend", function () {
-                const p = pickMarker.getLatLng();
-                $("fLat").value = p.lat.toFixed(6);
-                $("fLng").value = p.lng.toFixed(6);
-            });
-        } else {
-            pickMarker.setLatLng([lat, lng]);
-        }
-        if (pan) pickMap.setView([lat, lng], Math.max(pickMap.getZoom(), 16));
-    }
+        </div>
 
-    $("schoolModal").addEventListener("shown.bs.modal", function () {
-        if (!pickMap) {
-            pickMap = L.map("pickMap").setView([-13.9626, 33.7741], 12);
-            L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                maxZoom: 19,
-                attribution: "&copy; OpenStreetMap contributors"
-            }).addTo(pickMap);
+    </main>
 
-            pickMap.on("click", function (e) {
-                $("fLat").value = e.latlng.lat.toFixed(6);
-                $("fLng").value = e.latlng.lng.toFixed(6);
-                setPin(e.latlng.lat, e.latlng.lng, false);
-            });
-        }
 
-        pickMap.invalidateSize();
+    <!-- ============================= -->
+    <!-- ADD / EDIT MODAL -->
+    <!-- ============================= -->
 
-        const lat = parseFloat($("fLat").value);
-        const lng = parseFloat($("fLng").value);
-        if (!isNaN(lat) && !isNaN(lng)) {
-            setPin(lat, lng, true);
-        } else if (pickMarker) {
-            pickMap.removeLayer(pickMarker);
-            pickMarker = null;
-            pickMap.setView([-13.9626, 33.7741], 12);
-        }
-    });
+    <div class="modal fade" id="schoolModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
 
-    function onCoordInput() {
-        const lat = parseFloat($("fLat").value);
-        const lng = parseFloat($("fLng").value);
-        if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-            setPin(lat, lng, true);
-        }
-    }
-    $("fLat").addEventListener("change", onCoordInput);
-    $("fLng").addEventListener("change", onCoordInput);
+                <form id="schoolForm" novalidate>
 
-    function openForm(school) {
-        editingId = school ? school.id : null;
-        $("modalTitle").textContent = school ? "Edit school" : "Add school";
-        $("fName").value = school ? school.name : "";
-        $("fLevel").value = school ? school.level : "Primary School";
-        $("fOwner").value = school ? school.ownership : "Public";
-        $("fType").value = school ? (school.type || "") : "Day School";
-        $("fLat").value = school ? school.latitude : "";
-        $("fLng").value = school ? school.longitude : "";
-        $("fImage").value = school ? (school.image || "") : "";
-        say($("formMsg"), "", "text-danger");
-        modal.show();
-    }
+                    <div class="modal-header">
+                        <h5 id="modalTitle" class="modal-title">Add school</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
 
-    $("addBtn").addEventListener("click", () => openForm(null));
+                    <div class="modal-body">
 
-    $("schoolForm").addEventListener("submit", async function (e) {
-        e.preventDefault();
+                        <div class="row g-3">
 
-        const name = $("fName").value.trim();
-        const lat = parseFloat($("fLat").value);
-        const lng = parseFloat($("fLng").value);
+                            <div class="col-12">
+                                <label for="fName" class="form-label">School name *</label>
+                                <input id="fName" type="text" class="form-control" maxlength="150" required>
+                            </div>
 
-        if (!name) return say($("formMsg"), "Enter the school name.", "text-danger");
-        if (isNaN(lat) || lat < -90 || lat > 90) return say($("formMsg"), "Latitude must be a number between -90 and 90.", "text-danger");
-        if (isNaN(lng) || lng < -180 || lng > 180) return say($("formMsg"), "Longitude must be a number between -180 and 180.", "text-danger");
+                            <div class="col-md-4">
+                                <label for="fLevel" class="form-label">Level *</label>
+                                <select id="fLevel" class="form-select">
+                                    <option>Primary School</option>
+                                    <option>Secondary School</option>
+                                </select>
+                            </div>
 
-        const duplicate = schools.some(s =>
-            s.id !== editingId && s.name.trim().toLowerCase() === name.toLowerCase());
-        if (duplicate && !confirm(`A school named "${name}" already exists. Save anyway?`)) return;
+                            <div class="col-md-4">
+                                <label for="fOwner" class="form-label">Ownership *</label>
+                                <select id="fOwner" class="form-select">
+                                    <option>Public</option>
+                                    <option>Private</option>
+                                </select>
+                            </div>
 
-        const record = {
-            name: name,
-            level: $("fLevel").value,
-            ownership: $("fOwner").value,
-            type: $("fType").value.trim() || null,
-            latitude: lat,
-            longitude: lng,
-            image: $("fImage").value.trim() || null
-        };
+                            <div class="col-md-4">
+                                <label for="fType" class="form-label">Type</label>
+                                <input id="fType" type="text" class="form-control" list="typeList" value="Day School">
+                                <datalist id="typeList">
+                                    <option value="Day School"></option>
+                                    <option value="Boarding School"></option>
+                                </datalist>
+                            </div>
 
-        $("saveBtn").disabled = true;
-        say($("formMsg"), "Saving...", "text-muted");
+                            <div class="col-md-6">
+                                <label for="fLat" class="form-label">Latitude *</label>
+                                <input id="fLat" type="number" step="any" class="form-control" placeholder="-13.9626">
+                            </div>
 
-        const query = editingId
-            ? sb.from("schools").update(record).eq("id", editingId).select()
-            : sb.from("schools").insert(record).select();
+                            <div class="col-md-6">
+                                <label for="fLng" class="form-label">Longitude *</label>
+                                <input id="fLng" type="number" step="any" class="form-control" placeholder="33.7741">
+                            </div>
 
-        const { data, error } = await query;
-        $("saveBtn").disabled = false;
+                            <div class="col-12">
+                                <div class="form-text mb-1">Click the map to set the location (or type the coordinates above). Drag the pin to adjust it.</div>
+                                <div id="pickMap"></div>
+                            </div>
 
-        if (error) {
-            say($("formMsg"), isPermissionError(error) ? NO_PERMISSION : "Could not save: " + error.message, "text-danger");
-            return;
-        }
-        if (!data || data.length === 0) {
-            say($("formMsg"), NO_PERMISSION, "text-danger");
-            return;
-        }
+                            <div class="col-12">
+                                <label for="fImage" class="form-label">Photo link (optional)</label>
+                                <input id="fImage" type="text" class="form-control" placeholder="images/school.jpg or https://...">
+                            </div>
 
-        modal.hide();
-        await loadSchools();
-        say($("panelMsg"), `Saved "${name}". The public map shows the change straight away.`, "text-success");
-    });
+                        </div>
 
-    // ---------- delete ----------
-    async function deleteSchool(school) {
-        if (!confirm(`Delete "${school.name}"?\n\nThis removes it from the public map and cannot be undone.`)) return;
+                        <div id="formMsg" class="small text-danger mt-3"></div>
 
-        const { data, error } = await sb.from("schools").delete().eq("id", school.id).select();
+                    </div>
 
-        if (error) {
-            say($("panelMsg"), isPermissionError(error) ? NO_PERMISSION : "Could not delete: " + error.message, "text-danger");
-            return;
-        }
-        if (!data || data.length === 0) {
-            say($("panelMsg"), NO_PERMISSION, "text-danger");
-            return;
-        }
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button id="saveBtn" type="submit" class="btn btn-primary">Save</button>
+                    </div>
 
-        await loadSchools();
-        say($("panelMsg"), `Deleted "${school.name}".`, "text-success");
-    }
+                </form>
 
-    // ---------- backup ----------
-    $("backupBtn").addEventListener("click", function () {
-        const clean = schools.map(s => ({
-            name: s.name, level: s.level, ownership: s.ownership, type: s.type,
-            latitude: s.latitude, longitude: s.longitude, ...(s.image ? { image: s.image } : {})
-        }));
-        const blob = new Blob([JSON.stringify(clean, null, 2)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "schools-backup.json";
-        a.click();
-        URL.revokeObjectURL(a.href);
-    });
-    }
-})();
+            </div>
+        </div>
+    </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js?v=20261110d"></script>
+    <script src="js/admin.js?v=20261110d"></script>
+
+</body>
+
+</html>
