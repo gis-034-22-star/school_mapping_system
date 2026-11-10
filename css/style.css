@@ -341,3 +341,22 @@ button {
     }
 
 }
+
+
+/* =========================================
+   KEEP THE MAP IN VIEW WHILE THE SIDEBAR SCROLLS (desktop)
+========================================= */
+
+@media (min-width: 992px) {
+
+    .map-section {
+        position: sticky;
+        top: 10px;
+        align-self: flex-start;
+    }
+
+    #map {
+        height: calc(100vh - 70px);
+    }
+
+}
