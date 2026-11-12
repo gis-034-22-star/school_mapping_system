@@ -23,7 +23,7 @@ let startMarker = null;
 let destMarker = null;
 let clickPopup = null;
 
-const MILES_TO_METERS = 1609.34;
+const KM_TO_METERS = 1000;
 const LILONGWE = [-13.9626, 33.7741];
 
 // =========================================
@@ -325,6 +325,10 @@ function buildPopupContent(school, idx) {
             <div class="small"><strong>Ownership:</strong> ${escapeHtml(school.ownership)}</div>
             <div class="small"><strong>Type:</strong> ${escapeHtml(school.type)}</div>
             <div class="small"><strong>Coordinates:</strong> ${lat}, ${lng}</div>
+            <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2"
+                    onclick="window.addToCompare && window.addToCompare(${idx})">
+                <i class="bi bi-columns-gap"></i> Add to comparison
+            </button>
         </div>
     `;
 }
@@ -721,8 +725,7 @@ async function getPlannerDirections() {
 }
 
 function renderPlannerPanel(route) {
-    const miles = route.distance / MILES_TO_METERS;
-    const km = route.distance / 1000;
+    const km = route.distance / KM_TO_METERS;
 
     document.getElementById("directionsTitle").innerHTML = `
         <div><span class="badge bg-success">Start</span> ${escapeHtml(startPoint.label)}</div>
@@ -741,7 +744,7 @@ function renderPlannerPanel(route) {
         <div class="route-option active">
             <div class="d-flex justify-content-between">
                 <span class="fw-bold">${formatDuration(route.duration)}</span>
-                <span class="text-muted">${miles.toFixed(2)} miles (${km.toFixed(1)} km)</span>
+                <span class="text-muted">${km.toFixed(2)} km</span>
             </div>
             <div class="small text-muted">via OSRM Routing (OpenStreetMap)</div>
         </div>
@@ -846,10 +849,10 @@ function setupEventListeners() {
 }
 
 // =========================================
-// HAVERSINE DISTANCE (miles)
+// HAVERSINE DISTANCE (kilometres)
 // =========================================
-function haversineMiles(lat1, lon1, lat2, lon2) {
-    const R = 3959;
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a =
@@ -1023,8 +1026,8 @@ function setSearchLocation(lat, lng, label) {
         title: label
     }).addTo(map);
 
-    const radiusMiles = parseFloat(document.getElementById("radiusSelect").value);
-    drawRadiusCircle(radiusMiles);
+    const radiusKm = parseFloat(document.getElementById("radiusSelect").value);
+    drawRadiusCircle(radiusKm);
 
     logSuccess("SEARCH_LOCATION_SET");
 }
@@ -1032,8 +1035,8 @@ function setSearchLocation(lat, lng, label) {
 // =========================================
 // DRAW RADIUS CIRCLE
 // =========================================
-function drawRadiusCircle(radiusMiles) {
-    logStep("DRAW_RADIUS_CIRCLE", `${radiusMiles} miles`);
+function drawRadiusCircle(radiusKm) {
+    logStep("DRAW_RADIUS_CIRCLE", `${radiusKm} km`);
 
     if (radiusCircle) {
         map.removeLayer(radiusCircle);
@@ -1041,7 +1044,7 @@ function drawRadiusCircle(radiusMiles) {
 
     if (searchLocationMarker) {
         radiusCircle = L.circle(searchLocationMarker.getLatLng(), {
-            radius: radiusMiles * MILES_TO_METERS,
+            radius: radiusKm * KM_TO_METERS,
             color: "#0d6efd",
             weight: 1,
             opacity: 0.6,
@@ -1057,12 +1060,12 @@ function drawRadiusCircle(radiusMiles) {
 // QUERY OSRM FOR ROUTE DISTANCE
 // =========================================
 async function getRouteDistance(lat1, lng1, lat2, lng2, schoolName) {
-    const distanceHaversine = haversineMiles(lat1, lng1, lat2, lng2);
-    logStep("ROUTE_QUERY", `${schoolName} (haversine: ${distanceHaversine.toFixed(2)} miles)`);
+    const distanceHaversine = haversineKm(lat1, lng1, lat2, lng2);
+    logStep("ROUTE_QUERY", `${schoolName} (haversine: ${distanceHaversine.toFixed(2)} km)`);
 
     // Warn if distance is very large
-    if (distanceHaversine > 100) {
-        logStep("WARNING", `School ${schoolName} is ${distanceHaversine.toFixed(2)} miles away. Routing may be slow.`);
+    if (distanceHaversine > 150) {
+        logStep("WARNING", `School ${schoolName} is ${distanceHaversine.toFixed(2)} km away. Routing may be slow.`);
     }
 
     try {
@@ -1082,7 +1085,7 @@ async function getRouteDistance(lat1, lng1, lat2, lng2, schoolName) {
         if (data.routes && data.routes.length > 0) {
             const route = data.routes[0];
             const distanceMeters = route.distance;
-            const distanceMiles = distanceMeters / MILES_TO_METERS;
+            const distanceKm = distanceMeters / KM_TO_METERS;
             const durationSeconds = route.duration;
             const durationText = formatDuration(durationSeconds);
 
@@ -1095,14 +1098,14 @@ async function getRouteDistance(lat1, lng1, lat2, lng2, schoolName) {
 
             logSuccess("ROUTE_CALCULATED", {
                 school: schoolName,
-                distance: `${distanceMiles.toFixed(2)} miles`,
+                distance: `${distanceKm.toFixed(2)} km`,
                 duration: durationText,
                 hasGeometry: !!route.geometry,
                 hasCoordinates: !!route.geometry?.coordinates
             });
 
             return {
-                distance: distanceMiles,
+                distance: distanceKm,
                 duration: durationText,
                 geometry: route.geometry
             };
@@ -1141,21 +1144,21 @@ async function renderNearbySchools() {
         return;
     }
 
-    const radiusMiles = parseFloat(document.getElementById("radiusSelect").value);
-    showLoading(`Finding schools within ${radiusMiles} miles...`);
+    const radiusKm = parseFloat(document.getElementById("radiusSelect").value);
+    showLoading(`Finding schools within ${radiusKm} km...`);
 
-    logStep("FILTER_BY_HAVERSINE", `Radius: ${radiusMiles} miles, Total schools: ${schoolMarkers.length}`);
+    logStep("FILTER_BY_HAVERSINE", `Radius: ${radiusKm} km, Total schools: ${schoolMarkers.length}`);
 
     const candidatesByHaversine = schoolMarkers
         .map(function (item) {
-            const distance = haversineMiles(
+            const distance = haversineKm(
                 searchLocation.lat, searchLocation.lng,
                 Number(item.school.latitude),
                 Number(item.school.longitude)
             );
             return { item, distance };
         })
-        .filter(cand => cand.distance <= radiusMiles)
+        .filter(cand => cand.distance <= radiusKm)
         .sort((a, b) => a.distance - b.distance);
 
     logSuccess("HAVERSINE_FILTERED", `${candidatesByHaversine.length} schools within radius`);
@@ -1163,7 +1166,7 @@ async function renderNearbySchools() {
     if (candidatesByHaversine.length === 0) {
         document.getElementById("nearbySchoolsResults").innerHTML = `
             <p class="text-muted small">
-                No schools found within ${radiusMiles} miles.
+                No schools found within ${radiusKm} km.
             </p>
         `;
         document.getElementById("nearbyResultsHeader").textContent = "Nearby schools";
@@ -1206,7 +1209,7 @@ async function renderNearbySchools() {
     routeResults.sort((a, b) => a.distance - b.distance);
     logSuccess("ALL_ROUTES_CALCULATED", `${routeResults.length} valid routes`);
 
-    renderNearbySchoolsList(routeResults, radiusMiles);
+    renderNearbySchoolsList(routeResults, radiusKm);
     fitMapToResults(routeResults.map(r => r.item));
     hideLoading();
 }
@@ -1214,13 +1217,13 @@ async function renderNearbySchools() {
 // =========================================
 // RENDER NEARBY SCHOOLS LIST
 // =========================================
-function renderNearbySchoolsList(routeResults, radiusMiles, headerText) {
+function renderNearbySchoolsList(routeResults, radiusKm, headerText) {
     logStep("RENDER_LIST", `Displaying ${routeResults.length} schools`);
 
     const container = document.getElementById("nearbySchoolsResults");
     const header = document.getElementById("nearbyResultsHeader");
 
-    header.textContent = headerText || `${routeResults.length} schools within ${radiusMiles} miles`;
+    header.textContent = headerText || `${routeResults.length} schools within ${radiusKm} km`;
 
     container.innerHTML = routeResults.map(function (result, idx) {
         const item = result.item;
@@ -1231,7 +1234,7 @@ function renderNearbySchoolsList(routeResults, radiusMiles, headerText) {
             <div class="nearby-school-item" data-idx="${schoolMarkers.indexOf(item)}">
                 <div class="fw-bold">${item.school.name}</div>
                 <div class="small text-muted">
-                    ${distance} miles | ${duration}
+                    ${distance} km | ${duration}
                 </div>
                 <div class="small">
                     <span class="badge bg-light text-dark">${item.school.level}</span>
@@ -1312,7 +1315,7 @@ async function findNearestSchool() {
         showLoading("Finding nearest school (querying top 5 candidates in parallel)...");
 
         const candidatesWithHaversine = schoolMarkers.map(function (item) {
-            const distance = haversineMiles(
+            const distance = haversineKm(
                 lat, lng,
                 Number(item.school.latitude),
                 Number(item.school.longitude)
@@ -1323,7 +1326,7 @@ async function findNearestSchool() {
         candidatesWithHaversine.sort((a, b) => a.distance - b.distance);
         const topCandidates = candidatesWithHaversine.slice(0, 5);
 
-        logSuccess("TOP_5_FILTERED", topCandidates.map(c => `${c.item.school.name} (${c.distance.toFixed(2)} mi)`));
+        logSuccess("TOP_5_FILTERED", topCandidates.map(c => `${c.item.school.name} (${c.distance.toFixed(2)} km)`));
 
         // Query routes in PARALLEL instead of sequential
         showLoading("Querying OSRM for all 5 candidates (in parallel)...");
@@ -1357,7 +1360,7 @@ async function findNearestSchool() {
 
         if (routeResults.length > 0) {
             const nearest = routeResults[0];
-            logSuccess("NEAREST_FOUND", `${nearest.item.school.name} (${nearest.distance.toFixed(2)} miles)`);
+            logSuccess("NEAREST_FOUND", `${nearest.item.school.name} (${nearest.distance.toFixed(2)} km)`);
 
             showRoute(nearest.item.school, nearest.item.marker);
 
@@ -1479,7 +1482,7 @@ function renderDirectionsPanel(school, route) {
         <div class="route-option active">
             <div class="d-flex justify-content-between">
                 <span class="fw-bold">${route.duration}</span>
-                <span class="text-muted">${route.distance.toFixed(2)} miles</span>
+                <span class="text-muted">${route.distance.toFixed(2)} km</span>
             </div>
             <div class="small text-muted">
                 via OSRM Routing (OpenStreetMap)
