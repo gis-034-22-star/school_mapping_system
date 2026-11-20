@@ -1,0 +1,50 @@
+{
+  "type": "Feature",
+  "properties": {
+    "name": "Lilongwe City (approximate working boundary)",
+    "note": "Approximate outline built from the school locations plus a 0.7 km margin. Replace with the official Lilongwe City Council boundary."
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          33.66236,
+          -14.03391
+        ],
+        [
+          33.68534,
+          -14.05503
+        ],
+        [
+          33.81305,
+          -14.05037
+        ],
+        [
+          33.82666,
+          -14.02038
+        ],
+        [
+          33.85346,
+          -13.95929
+        ],
+        [
+          33.81674,
+          -13.76145
+        ],
+        [
+          33.80888,
+          -13.74857
+        ],
+        [
+          33.7393,
+          -13.78877
+        ],
+        [
+          33.66236,
+          -14.03391
+        ]
+      ]
+    ]
+  }
+}

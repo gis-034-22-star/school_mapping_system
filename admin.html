@@ -105,6 +105,22 @@
 
         <div id="adminPanel" class="d-none">
 
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <button id="tabBtnSchools" class="nav-link active" type="button">
+                        <i class="bi bi-building"></i> Schools
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button id="tabBtnSubs" class="nav-link" type="button">
+                        <i class="bi bi-clipboard2-check"></i> School Registrations and Updates
+                        <span id="pendingBadge" class="badge bg-danger ms-1 d-none">0</span>
+                    </button>
+                </li>
+            </ul>
+
+            <div id="tabSchools">
+
             <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
 
                 <input id="filterText" type="text" class="form-control" style="max-width: 260px;" placeholder="Search school name...">
@@ -153,6 +169,50 @@
                         <tbody id="schoolRows"></tbody>
                     </table>
                 </div>
+            </div>
+
+            </div>
+
+
+            <!-- ============================= -->
+            <!-- SCHOOL REGISTRATIONS AND UPDATES (education officers) -->
+            <!-- ============================= -->
+
+            <div id="tabSubs" class="d-none">
+
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                    <select id="subFilter" class="form-select" style="max-width: 200px;">
+                        <option value="pending" selected>Waiting for review</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="">All</option>
+                    </select>
+                    <span id="subCount" class="text-muted small"></span>
+                    <button id="subRefresh" class="btn btn-outline-secondary ms-auto" type="button">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+
+                <div id="subMsg" class="small mb-2"></div>
+
+                <div class="card shadow-sm">
+                    <div class="table-wrap">
+                        <table class="table table-hover table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Submitted</th>
+                                    <th>Type</th>
+                                    <th>School</th>
+                                    <th>Submitted by</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subRows"></tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
 
         </div>
@@ -249,6 +309,47 @@
     </div>
 
 
+    <!-- ============================= -->
+    <!-- REVIEW MODAL -->
+    <!-- ============================= -->
+
+    <div class="modal fade" id="reviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 id="reviewTitle" class="modal-title">Review submission</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-lg-7"><div id="reviewBody"></div></div>
+                        <div class="col-lg-5">
+                            <div class="fw-bold small mb-1">Location</div>
+                            <div id="reviewMap" style="height: 300px; border-radius: 6px; border: 1px solid #dee2e6;"></div>
+                            <div class="small text-muted mt-1">Red = submitted location. Grey = current location (for updates).</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer flex-column align-items-stretch">
+                    <div id="reviewActions">
+                        <label for="reviewNote" class="form-label small mb-1">Note to the submitter (required when rejecting)</label>
+                        <textarea id="reviewNote" class="form-control mb-2" rows="2" maxlength="500"></textarea>
+                        <div id="reviewMsg" class="small mb-2"></div>
+                        <div class="d-flex gap-2 justify-content-end">
+                            <button id="rejectBtn" type="button" class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> Reject</button>
+                            <button id="approveBtn" type="button" class="btn btn-success"><i class="bi bi-check-circle"></i> Approve and publish</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -282,7 +383,7 @@
     const key = String(window.SUPABASE_ANON_KEY || "").trim().replace(/^["']+|["']+$/g, "");
 
 
-    const PAGE_VERSION = "2026-11-10e";
+    const PAGE_VERSION = "2026-11-21a";
     function showDiag() {
         const el = $("diag");
         if (!el) return;
@@ -362,12 +463,26 @@
     }
 
     async function showPanel(user) {
+        const check = await sb.rpc("is_admin");
+        if (check.error) {
+            showLogin();
+            say($("loginMsg"), "Could not check your permissions: " + check.error.message, "text-danger");
+            return;
+        }
+        if (check.data !== true) {
+            showLogin();
+            say($("loginMsg"), "This account is not an education officer, so it cannot open the admin page. To submit a school, use School Registrations and Updates on the map page.", "text-danger");
+            sb.auth.signOut();
+            return;
+        }
+
         $("loginCard").classList.add("d-none");
         $("adminPanel").classList.remove("d-none");
         $("userEmail").textContent = user.email || "";
         $("userEmail").classList.remove("d-none");
         $("signOutBtn").classList.remove("d-none");
         await loadSchools();
+        loadSubs();
     }
 
     $("loginForm").addEventListener("submit", async function (e) {
@@ -661,6 +776,206 @@ This removes it from the public map and cannot be undone.`)) return;
         a.click();
         URL.revokeObjectURL(a.href);
     });
+
+    /* ---------- School Registrations and Updates (review) ---------- */
+    let subs = [];
+    let current = null;
+    let reviewModal = null;
+    let reviewMap = null;
+    let reviewLayer = null;
+
+    function esc(t) {
+        const d = document.createElement("div");
+        d.textContent = t == null ? "" : String(t);
+        return d.innerHTML;
+    }
+
+    function showTab(which) {
+        const subsTab = which === "subs";
+        $("tabSchools").classList.toggle("d-none", subsTab);
+        $("tabSubs").classList.toggle("d-none", !subsTab);
+        $("tabBtnSchools").classList.toggle("active", !subsTab);
+        $("tabBtnSubs").classList.toggle("active", subsTab);
+    }
+    $("tabBtnSchools").addEventListener("click", () => showTab("schools"));
+    $("tabBtnSubs").addEventListener("click", () => { showTab("subs"); loadSubs(); });
+
+    async function loadSubs() {
+        say($("subMsg"), "Loading...", "text-muted");
+        const { data, error } = await sb.from("school_submissions").select("*").order("created_at", { ascending: false });
+        if (error) {
+            const missing = /school_submissions|relation|does not exist/i.test(error.message || "");
+            say($("subMsg"), missing
+                ? "The registrations feature is not set up yet. Run supabase/registrations.sql in the Supabase SQL Editor."
+                : "Could not load submissions: " + error.message, "text-danger");
+            return;
+        }
+        subs = data;
+        say($("subMsg"), "");
+        const pending = subs.filter(x => x.status === "pending").length;
+        $("pendingBadge").textContent = pending;
+        $("pendingBadge").classList.toggle("d-none", pending === 0);
+        renderSubs();
+    }
+
+    function statusBadge(st) {
+        const cls = st === "approved" ? "bg-success" : st === "rejected" ? "bg-danger" : "bg-warning text-dark";
+        const txt = st === "pending" ? "Waiting" : st.charAt(0).toUpperCase() + st.slice(1);
+        return '<span class="badge ' + cls + '">' + txt + "</span>";
+    }
+
+    function renderSubs() {
+        const f = $("subFilter").value;
+        const shown = subs.filter(x => !f || x.status === f);
+        $("subCount").textContent = shown.length + " of " + subs.length + " submissions";
+
+        const body = $("subRows");
+        body.innerHTML = "";
+
+        shown.forEach(function (x) {
+            const tr = document.createElement("tr");
+            tr.innerHTML =
+                "<td>" + new Date(x.created_at).toLocaleDateString() + "</td>" +
+                "<td>" + (x.kind === "update" ? "Update" : "New school") + "</td>" +
+                "<td>" + esc(x.name) + "</td>" +
+                "<td>" + esc(x.submitter_name || "") + '<div class="small text-muted">' + esc(x.submitter_email || "") + "</div></td>" +
+                "<td>" + statusBadge(x.status) + "</td>" +
+                '<td class="text-end"></td>';
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn btn-sm " + (x.status === "pending" ? "btn-primary" : "btn-outline-secondary");
+            btn.innerHTML = x.status === "pending" ? '<i class="bi bi-search"></i> Review' : '<i class="bi bi-eye"></i> View';
+            btn.addEventListener("click", () => openReview(x));
+            tr.lastChild.appendChild(btn);
+            body.appendChild(tr);
+        });
+
+        if (shown.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No submissions here.</td></tr>';
+        }
+    }
+    $("subFilter").addEventListener("change", renderSubs);
+    $("subRefresh").addEventListener("click", loadSubs);
+
+    reviewModal = new bootstrap.Modal($("reviewModal"));
+
+    function cmpRow(label, oldV, newV, isUpdate) {
+        const changed = isUpdate && String(oldV == null ? "" : oldV) !== String(newV == null ? "" : newV);
+        return '<tr class="' + (changed ? "table-warning" : "") + '"><th class="fw-semibold">' + label + "</th>" +
+            (isUpdate ? "<td>" + esc(oldV) + "</td>" : "") +
+            "<td>" + esc(newV) + (changed ? " <b>*</b>" : "") + "</td></tr>";
+    }
+
+    function openReview(x) {
+        current = x;
+        const isUpdate = x.kind === "update";
+        const old = isUpdate ? schools.find(s => s.id === x.target_school_id) : null;
+        const o = old || {};
+
+        $("reviewTitle").textContent = (isUpdate ? "Update: " : "New school: ") + x.name;
+
+        const evHtml = (x.evidence || []).map(function (e, i) {
+            return '<div class="d-flex justify-content-between align-items-center border rounded p-2 mb-1">' +
+                "<div><b>" + esc(e.category || "Document") + '</b><div class="small text-muted">' + esc(e.name || "") +
+                (e.size ? " (" + Math.round(e.size / 1024) + " KB)" : "") + "</div></div>" +
+                '<button type="button" class="btn btn-outline-primary btn-sm ev-open" data-i="' + i + '"><i class="bi bi-box-arrow-up-right"></i> Open</button></div>';
+        }).join("") || '<div class="text-muted small">No documents.</div>';
+
+        $("reviewBody").innerHTML =
+            '<div class="small mb-2">Submitted by <b>' + esc(x.submitter_name || "") + "</b> (" + esc(x.submitter_email || "") + ") on " +
+            new Date(x.created_at).toLocaleString() + " &nbsp; " + statusBadge(x.status) + "</div>" +
+            '<table class="table table-sm table-bordered mb-3"><thead class="table-light"><tr><th></th>' +
+            (isUpdate ? "<th>Current (on the map)</th>" : "") + "<th>" + (isUpdate ? "Proposed" : "Submitted") + "</th></tr></thead><tbody>" +
+            cmpRow("School name", o.name, x.name, isUpdate) +
+            cmpRow("Level", o.level, x.level, isUpdate) +
+            cmpRow("Ownership", o.ownership, x.ownership, isUpdate) +
+            cmpRow("Type", o.type, x.type, isUpdate) +
+            cmpRow("Latitude", o.latitude, x.latitude, isUpdate) +
+            cmpRow("Longitude", o.longitude, x.longitude, isUpdate) +
+            "</tbody></table>" +
+            (isUpdate && !old ? '<div class="alert alert-warning py-1 small">The school to update no longer exists. It cannot be approved.</div>' : "") +
+            '<div class="small mb-2"><b>Location taken from:</b> ' +
+            (x.location_method === "gps" ? "GPS" + (x.gps_accuracy_m != null ? " (accuracy about " + x.gps_accuracy_m + " m)" : "") :
+             x.location_method === "map" ? "a point selected on the map" : "typed coordinates") + "</div>" +
+            (x.notes ? '<div class="small mb-2"><b>Submitter notes:</b> ' + esc(x.notes) + "</div>" : "") +
+            '<div class="fw-bold small mb-1">Supporting evidence</div>' + evHtml +
+            (x.status !== "pending" ? '<div class="small mt-3"><b>Decision:</b> ' + statusBadge(x.status) + " by " + esc(x.reviewed_by || "") +
+                (x.reviewed_at ? " on " + new Date(x.reviewed_at).toLocaleDateString() : "") +
+                (x.review_note ? "<br><b>Note:</b> " + esc(x.review_note) : "") + "</div>" : "");
+
+        $("reviewBody").querySelectorAll(".ev-open").forEach(function (b) {
+            b.addEventListener("click", () => openEvidence(x.evidence[parseInt(b.dataset.i, 10)]));
+        });
+
+        $("reviewActions").classList.toggle("d-none", x.status !== "pending");
+        $("reviewNote").value = "";
+        say($("reviewMsg"), "");
+        reviewModal.show();
+    }
+
+    async function openEvidence(e) {
+        const w = window.open("", "_blank");
+        const { data, error } = await sb.storage.from("school-evidence").createSignedUrl(e.path, 600);
+        if (error || !data) {
+            if (w) w.close();
+            say($("reviewMsg"), "Could not open the document: " + (error ? error.message : "unknown error"), "text-danger");
+            return;
+        }
+        if (w) w.location = data.signedUrl;
+        else window.location = data.signedUrl;
+    }
+
+    $("reviewModal").addEventListener("shown.bs.modal", function () {
+        if (!reviewMap) {
+            reviewMap = L.map("reviewMap").setView([-13.9626, 33.7741], 12);
+            L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(reviewMap);
+        }
+        reviewMap.invalidateSize();
+        if (reviewLayer) reviewMap.removeLayer(reviewLayer);
+        reviewLayer = L.layerGroup().addTo(reviewMap);
+
+        const pts = [];
+        if (current) {
+            const p = [current.latitude, current.longitude];
+            pts.push(p);
+            L.circleMarker(p, { radius: 9, color: "#dc3545", fillColor: "#dc3545", fillOpacity: 0.7 }).bindTooltip("Submitted location").addTo(reviewLayer);
+            const old = current.kind === "update" ? schools.find(s => s.id === current.target_school_id) : null;
+            if (old) {
+                const q = [old.latitude, old.longitude];
+                pts.push(q);
+                L.circleMarker(q, { radius: 7, color: "#555", fillColor: "#999", fillOpacity: 0.8 }).bindTooltip("Current location").addTo(reviewLayer);
+            }
+            if (pts.length > 1) reviewMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 17 });
+            else reviewMap.setView(p, 16);
+        }
+    });
+
+    async function decide(approve) {
+        if (!current) return;
+        const note = $("reviewNote").value.trim();
+        if (!approve && !note) return say($("reviewMsg"), "Write a short reason before rejecting.", "text-danger");
+        if (approve && !confirm("Approve and publish \"" + current.name + "\" on the public map?")) return;
+
+        $("approveBtn").disabled = true;
+        $("rejectBtn").disabled = true;
+        say($("reviewMsg"), "Saving...", "text-muted");
+
+        const { error } = await sb.rpc("review_submission", { p_id: current.id, p_approve: approve, p_note: note || null });
+
+        $("approveBtn").disabled = false;
+        $("rejectBtn").disabled = false;
+
+        if (error) return say($("reviewMsg"), error.message, "text-danger");
+
+        reviewModal.hide();
+        await loadSubs();
+        await loadSchools();
+        say($("subMsg"), approve ? "Approved. The school is now on the public map." : "Rejected. The submitter can see your note.", "text-success");
+    }
+    $("approveBtn").addEventListener("click", () => decide(true));
+    $("rejectBtn").addEventListener("click", () => decide(false));
     }
 })();
 

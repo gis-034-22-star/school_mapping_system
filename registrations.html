@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>School Registrations and Updates | Lilongwe School Mapping System</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
+
+    <style>
+        #regMap { height: 380px; border-radius: 8px; border: 1px solid #dee2e6; }
+        #regMap.picking { cursor: crosshair; }
+        .step-title { font-weight: 700; color: #0d6efd; }
+        .check-line { font-size: 0.9rem; }
+        .ev-row { background: #f8f9fa; border: 1px solid #e3e6ea; border-radius: 8px; padding: 10px; }
+    </style>
+
+</head>
+
+<body class="bg-light">
+
+    <!-- ============================= -->
+    <!-- NAVBAR -->
+    <!-- ============================= -->
+
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+
+            <span class="navbar-brand">
+                <i class="bi bi-clipboard2-check"></i>
+                School Registrations and Updates
+            </span>
+
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <a href="index.html" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-map"></i> Back to map
+                </a>
+                <a id="officerLink" href="admin.html" class="btn btn-warning btn-sm d-none">
+                    <i class="bi bi-shield-check"></i> Review submissions (officers)
+                </a>
+                <span id="userEmail" class="text-white-50 small d-none"></span>
+                <button id="signOutBtn" class="btn btn-outline-light btn-sm d-none" type="button">
+                    <i class="bi bi-box-arrow-right"></i> Sign out
+                </button>
+            </div>
+
+        </div>
+    </nav>
+
+
+    <main class="container py-4">
+
+        <div id="setupWarning" class="alert alert-warning d-none"></div>
+
+
+        <!-- ============================= -->
+        <!-- SIGN IN / REGISTER -->
+        <!-- ============================= -->
+
+        <div id="authCard" class="card shadow-sm mx-auto d-none" style="max-width: 460px;">
+            <div class="card-body p-4">
+
+                <h5 class="fw-bold mb-1">Register or sign in</h5>
+                <p class="text-muted small">
+                    Anyone can use the map without an account. To <b>submit a new school</b> or an
+                    <b>update</b>, create a free account first. Every submission is checked by an
+                    education officer before it appears on the public map.
+                </p>
+
+                <ul class="nav nav-pills nav-fill mb-3">
+                    <li class="nav-item"><button id="tabSignIn" class="nav-link active" type="button">Sign in</button></li>
+                    <li class="nav-item"><button id="tabRegister" class="nav-link" type="button">Create account</button></li>
+                </ul>
+
+                <form id="authForm" novalidate>
+
+                    <div id="nameGroup" class="mb-3 d-none">
+                        <label for="authName" class="form-label">Full name</label>
+                        <input id="authName" type="text" class="form-control" maxlength="100" autocomplete="name">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="authEmail" class="form-label">Email</label>
+                        <input id="authEmail" type="email" class="form-control" autocomplete="username">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="authPassword" class="form-label">Password</label>
+                        <input id="authPassword" type="password" class="form-control" autocomplete="current-password">
+                        <div id="pwHint" class="form-text d-none">At least 8 characters.</div>
+                    </div>
+
+                    <div id="authMsg" class="small mb-3"></div>
+
+                    <button id="authBtn" type="submit" class="btn btn-primary w-100">Sign in</button>
+
+                    <div class="text-center mt-3">
+                        <button id="forgotBtn" type="button" class="btn btn-link btn-sm">Forgot password?</button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+
+
+        <!-- ============================= -->
+        <!-- NEW PASSWORD (after the reset link) -->
+        <!-- ============================= -->
+
+        <div id="recoveryCard" class="card shadow-sm mx-auto d-none" style="max-width: 460px;">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3">Choose a new password</h5>
+                <form id="recoveryForm" novalidate>
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label">New password</label>
+                        <input id="newPassword" type="password" class="form-control" autocomplete="new-password">
+                        <div class="form-text">At least 8 characters.</div>
+                    </div>
+                    <div id="recoveryMsg" class="small mb-3"></div>
+                    <button type="submit" class="btn btn-primary w-100">Save new password</button>
+                </form>
+            </div>
+        </div>
+
+
+        <!-- ============================= -->
+        <!-- MAIN APP (signed in) -->
+        <!-- ============================= -->
+
+        <div id="appPanel" class="d-none">
+
+            <div class="btn-group mb-3 flex-wrap" role="group" aria-label="Choose">
+                <button id="modeNew" type="button" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Register a new school</button>
+                <button id="modeUpdate" type="button" class="btn btn-outline-primary"><i class="bi bi-pencil-square"></i> Update an existing school</button>
+                <button id="modeMine" type="button" class="btn btn-outline-primary"><i class="bi bi-list-check"></i> My submissions</button>
+            </div>
+
+
+            <!-- ----- Submission form ----- -->
+            <form id="regForm" novalidate>
+
+                <div class="row g-4">
+
+                    <!-- Left: details + evidence -->
+                    <div class="col-lg-5">
+
+                        <div class="card shadow-sm mb-3">
+                            <div class="card-body">
+
+                                <div class="step-title mb-2">1. School details</div>
+
+                                <div id="updatePicker" class="mb-3 d-none">
+                                    <label for="pickSchool" class="form-label">School to update *</label>
+                                    <input id="pickSchool" type="text" class="form-control" list="schoolNames" autocomplete="off" placeholder="Type or choose a school name">
+                                    <datalist id="schoolNames"></datalist>
+                                    <div id="pickInfo" class="form-text">Choose the school, then change what is wrong or out of date.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="fName" class="form-label">School name *</label>
+                                    <input id="fName" type="text" class="form-control" maxlength="150">
+                                </div>
+
+                                <div class="row g-2 mb-1">
+                                    <div class="col-sm-6">
+                                        <label for="fLevel" class="form-label">Level *</label>
+                                        <select id="fLevel" class="form-select">
+                                            <option>Primary School</option>
+                                            <option>Secondary School</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label for="fOwner" class="form-label">Ownership *</label>
+                                        <select id="fOwner" class="form-select">
+                                            <option>Public</option>
+                                            <option>Private</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="mb-1">
+                                    <label for="fType" class="form-label">School type</label>
+                                    <input id="fType" type="text" class="form-control" list="typeList" value="Day School">
+                                    <datalist id="typeList">
+                                        <option value="Day School"></option>
+                                        <option value="Boarding School"></option>
+                                    </datalist>
+                                </div>
+
+                            </div>
+                        </div>
+
+
+                        <div class="card shadow-sm mb-3">
+                            <div class="card-body">
+
+                                <div class="step-title mb-1">3. Supporting evidence *</div>
+                                <p class="small text-muted mb-2">
+                                    To prevent false submissions, attach at least one document that proves the school or the change.
+                                    For example: school registration certificate, Ministry of Education approval, a letter from the
+                                    headteacher, a photograph of the school premises, or evidence of when the school was established.
+                                    PDF, JPG, PNG or WEBP, up to 5 MB each (maximum 5 files).
+                                </p>
+
+                                <div id="evRows" class="d-flex flex-column gap-2 mb-2"></div>
+
+                                <button id="addEvBtn" type="button" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-paperclip"></i> Add another document
+                                </button>
+
+                                <div class="mt-3">
+                                    <label for="fNotes" class="form-label">Notes for the education officer (optional)</label>
+                                    <textarea id="fNotes" class="form-control" rows="2" maxlength="600" placeholder="Anything that helps the officer check your submission"></textarea>
+                                </div>
+
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    <!-- Right: location -->
+                    <div class="col-lg-7">
+
+                        <div class="card shadow-sm mb-3">
+                            <div class="card-body">
+
+                                <div class="step-title mb-2">2. School location (must be inside Lilongwe City)</div>
+
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    <button id="gpsBtn" type="button" class="btn btn-outline-success btn-sm">
+                                        <i class="bi bi-crosshair"></i> Use my current location (GPS)
+                                    </button>
+                                    <button id="pickBtn" type="button" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-cursor"></i> Select location on the map
+                                    </button>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6">
+                                        <label for="fLat" class="form-label small mb-0">Latitude *</label>
+                                        <input id="fLat" type="number" step="any" class="form-control form-control-sm" placeholder="-13.9626">
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="fLng" class="form-label small mb-0">Longitude *</label>
+                                        <input id="fLng" type="number" step="any" class="form-control form-control-sm" placeholder="33.7741">
+                                    </div>
+                                </div>
+
+                                <div id="regMap" class="mb-2"></div>
+                                <div class="small text-muted mb-2">
+                                    The dashed blue line is the Lilongwe City boundary. Grey dots are schools already on the map.
+                                    Drag the red pin to adjust it. For GPS, stand at the school gate for the best accuracy.
+                                </div>
+
+                                <div id="verifyBox" class="border rounded p-2 bg-white"></div>
+
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+
+                        <div class="form-check mb-3">
+                            <input id="fConfirm" class="form-check-input" type="checkbox">
+                            <label for="fConfirm" class="form-check-label small">
+                                I confirm that the information and documents I am submitting are true. I understand that an
+                                education officer will check them and that false submissions will be rejected.
+                            </label>
+                        </div>
+
+                        <div id="formMsg" class="small mb-2"></div>
+
+                        <button id="submitBtn" type="submit" class="btn btn-success">
+                            <i class="bi bi-send"></i> Submit for approval
+                        </button>
+
+                    </div>
+                </div>
+
+            </form>
+
+
+            <!-- ----- My submissions ----- -->
+            <div id="minePanel" class="d-none">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="fw-bold mb-0">My submissions</h5>
+                    <button id="refreshMine" type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                </div>
+                <div id="mineMsg" class="small mb-2"></div>
+                <div id="mineList" class="d-flex flex-column gap-2"></div>
+            </div>
+
+        </div>
+
+        <div id="diag" class="text-muted small mt-4"></div>
+
+    </main>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+    <script src="js/config.js?v=20261110d"></script>
+    <script>
+/* ========================================= */
+/* SCHOOL REGISTRATIONS AND UPDATES (registered users) */
+/* ========================================= */
+(function () {
+    const $ = id => document.getElementById(id);
+
+    const EVIDENCE_TYPES = [
+        "School registration certificate",
+        "Ministry of Education approval document",
+        "Letter from the headteacher",
+        "Photograph of the school premises",
+        "Evidence of school establishment",
+        "Other supporting document"
+    ];
+    const MAX_FILES = 5;
+    const MAX_BYTES = 5 * 1024 * 1024;
+    const OK_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    const DUP_KM = 0.03;
+    const LILONGWE = [-13.9626, 33.7741];
+
+    /* ---------- settings ---------- */
+    function normalizeSupabaseUrl(raw) {
+        let text = String(raw || "").trim().replace(/^["']+|["']+$/g, "");
+        if (!text) return "";
+        if (!/^https?:[\/][\/]/i.test(text)) text = "https://" + text;
+        try {
+            const u = new URL(text);
+            const m = u.pathname.match(/\/project\/([a-z0-9]+)/i);
+            if (/(^|\.)supabase\.com$/i.test(u.hostname) && m) return "https://" + m[1] + ".supabase.co";
+            return u.origin;
+        } catch (e) {
+            return "";
+        }
+    }
+
+    const url = normalizeSupabaseUrl(window.SUPABASE_URL);
+    const key = String(window.SUPABASE_ANON_KEY || "").trim().replace(/^["']+|["']+$/g, "");
+
+    function warn(html) {
+        const box = $("setupWarning");
+        box.innerHTML = html;
+        box.classList.remove("d-none");
+    }
+
+    if (!url || !key) {
+        warn("<strong>js/config.js has no Supabase settings.</strong> Paste your Project URL and anon public key between the quotes, save and upload the file.");
+        return;
+    }
+
+    if (window.supabase) {
+        start();
+    } else {
+        const fallback = document.createElement("script");
+        fallback.src = "https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js";
+        fallback.onload = function () {
+            if (window.supabase) start();
+            else warn("<strong>Could not load the Supabase library.</strong> Check your internet connection and reload.");
+        };
+        fallback.onerror = function () {
+            warn("<strong>Could not load the Supabase library.</strong> Check your internet connection and reload.");
+        };
+        document.head.appendChild(fallback);
+    }
+
+    function start() {
+
+    const sb = window.supabase.createClient(url, key);
+
+    let user = null;
+    let recovering = false;
+    let registerMode = false;
+
+    let mode = "new";            /* "new" | "update" | "mine" */
+    let schools = [];
+    let ring = null;             /* city boundary: [[lng, lat], ...] */
+    let targetSchool = null;     /* school being updated */
+    let locMethod = null;        /* "gps" | "map" | "typed" */
+    let gpsAcc = null;
+
+    let map = null;
+    let pin = null;
+    let picking = false;
+    let dataLoaded = false;
+    let mineNotice = "";
+
+    /* ---------- helpers ---------- */
+    function say(el, text, cls) {
+        el.textContent = text || "";
+        el.className = "small " + (cls || "");
+    }
+
+    function esc(t) {
+        const d = document.createElement("div");
+        d.textContent = t == null ? "" : String(t);
+        return d.innerHTML;
+    }
+
+    function haversineKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function inRing(lng, lat, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+            if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+
+    /* ---------- sign in / register ---------- */
+    function showAuth() {
+        $("authCard").classList.remove("d-none");
+        $("recoveryCard").classList.add("d-none");
+        $("appPanel").classList.add("d-none");
+        $("userEmail").classList.add("d-none");
+        $("signOutBtn").classList.add("d-none");
+        $("officerLink").classList.add("d-none");
+    }
+
+    function showRecovery() {
+        recovering = true;
+        $("authCard").classList.add("d-none");
+        $("appPanel").classList.add("d-none");
+        $("recoveryCard").classList.remove("d-none");
+    }
+
+    function setRegisterMode(on) {
+        registerMode = on;
+        $("tabSignIn").classList.toggle("active", !on);
+        $("tabRegister").classList.toggle("active", on);
+        $("nameGroup").classList.toggle("d-none", !on);
+        $("pwHint").classList.toggle("d-none", !on);
+        $("authBtn").textContent = on ? "Create account" : "Sign in";
+        $("authPassword").setAttribute("autocomplete", on ? "new-password" : "current-password");
+        say($("authMsg"), "");
+    }
+    $("tabSignIn").addEventListener("click", () => setRegisterMode(false));
+    $("tabRegister").addEventListener("click", () => setRegisterMode(true));
+
+    $("authForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const email = $("authEmail").value.trim();
+        const password = $("authPassword").value;
+        const name = $("authName").value.trim();
+
+        if (!email || !password) return say($("authMsg"), "Enter your email and password.", "text-danger");
+
+        $("authBtn").disabled = true;
+
+        if (registerMode) {
+            if (!name) { $("authBtn").disabled = false; return say($("authMsg"), "Enter your full name.", "text-danger"); }
+            if (password.length < 8) { $("authBtn").disabled = false; return say($("authMsg"), "The password must have at least 8 characters.", "text-danger"); }
+
+            say($("authMsg"), "Creating your account...", "text-muted");
+            const { data, error } = await sb.auth.signUp({
+                email: email,
+                password: password,
+                options: {
+                    data: { full_name: name },
+                    emailRedirectTo: location.origin + location.pathname
+                }
+            });
+            $("authBtn").disabled = false;
+
+            if (error) return say($("authMsg"), "Could not create the account: " + error.message, "text-danger");
+
+            if (data.user && data.user.identities && data.user.identities.length === 0) {
+                return say($("authMsg"), "This email is already registered. Use Sign in.", "text-danger");
+            }
+            if (!data.session) {
+                say($("authMsg"), "Account created. Open the confirmation email we sent you, click the link, then sign in here.", "text-success");
+            }
+            return;
+        }
+
+        say($("authMsg"), "Signing in...", "text-muted");
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        $("authBtn").disabled = false;
+        if (error) return say($("authMsg"), "Sign-in failed: " + error.message, "text-danger");
+        say($("authMsg"), "");
+        $("authPassword").value = "";
+    });
+
+    $("forgotBtn").addEventListener("click", async function () {
+        const email = $("authEmail").value.trim();
+        if (!email) return say($("authMsg"), "Type your email above first, then press Forgot password.", "text-danger");
+        say($("authMsg"), "Sending the reset link...", "text-muted");
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+        if (error) return say($("authMsg"), "Could not send the email: " + error.message, "text-danger");
+        say($("authMsg"), "If this email is registered, a reset link has been sent. Open it to choose a new password.", "text-success");
+    });
+
+    $("recoveryForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const pw = $("newPassword").value;
+        if (pw.length < 8) return say($("recoveryMsg"), "The password must have at least 8 characters.", "text-danger");
+        const { error } = await sb.auth.updateUser({ password: pw });
+        if (error) return say($("recoveryMsg"), "Could not save: " + error.message, "text-danger");
+        say($("recoveryMsg"), "Password changed.", "text-success");
+        recovering = false;
+        const { data } = await sb.auth.getSession();
+        if (data.session) setTimeout(() => showApp(data.session.user), 600);
+    });
+
+    $("signOutBtn").addEventListener("click", async function () { await sb.auth.signOut(); });
+
+    sb.auth.onAuthStateChange(function (event, session) {
+        if (event === "PASSWORD_RECOVERY") {
+            setTimeout(showRecovery, 0);
+            return;
+        }
+        if (session && session.user) {
+            if (recovering) return;
+            if (user && user.id === session.user.id) return;
+            user = session.user;
+            setTimeout(() => showApp(session.user), 0);
+        } else {
+            user = null;
+            showAuth();
+        }
+    });
+
+    sb.auth.getSession().then(function ({ data }) {
+        if (!data.session && !recovering) showAuth();
+    });
+
+    /* ---------- app ---------- */
+    async function showApp(u) {
+        $("authCard").classList.add("d-none");
+        $("recoveryCard").classList.add("d-none");
+        $("appPanel").classList.remove("d-none");
+        $("userEmail").textContent = u.email || "";
+        $("userEmail").classList.remove("d-none");
+        $("signOutBtn").classList.remove("d-none");
+
+        sb.rpc("is_admin").then(function (r) {
+            if (r && r.data === true) $("officerLink").classList.remove("d-none");
+        });
+
+        initMap();
+        if (!dataLoaded) {
+            dataLoaded = true;
+            await Promise.all([loadBoundary(), loadSchools()]);
+        }
+        if ($("evRows").children.length === 0) addEvRow();
+        setMode(mode);
+        refreshVerify();
+    }
+
+    async function loadBoundary() {
+        ring = null;
+        try {
+            const { data, error } = await sb.from("city_boundary").select("geojson").eq("id", 1).maybeSingle();
+            if (!error && data && data.geojson && data.geojson.coordinates) ring = data.geojson.coordinates[0];
+        } catch (e) { /* fall through to the file */ }
+
+        if (!ring) {
+            try {
+                const res = await fetch("data/lilongwe-boundary.json", { cache: "no-store" });
+                const gj = await res.json();
+                const geom = gj.geometry || gj;
+                ring = geom.coordinates[0];
+            } catch (e) { ring = null; }
+        }
+
+        if (ring && map) {
+            L.polygon(ring.map(p => [p[1], p[0]]), {
+                color: "#0d6efd", weight: 2, dashArray: "6 6", fillColor: "#0d6efd", fillOpacity: 0.05, interactive: false
+            }).addTo(map);
+            map.fitBounds(L.latLngBounds(ring.map(p => [p[1], p[0]])));
+        }
+    }
+
+    async function loadSchools() {
+        const all = [];
+        let from = 0;
+        while (true) {
+            const { data, error } = await sb.from("schools").select("*").order("name", { ascending: true }).range(from, from + 999);
+            if (error) { say($("formMsg"), "Could not load existing schools: " + error.message, "text-danger"); break; }
+            all.push(...data);
+            if (data.length < 1000) break;
+            from += 1000;
+        }
+        schools = all;
+
+        $("schoolNames").innerHTML = schools.map(s => '<option value="' + esc(s.name) + '"></option>').join("");
+
+        if (map) {
+            schools.forEach(function (s) {
+                L.circleMarker([s.latitude, s.longitude], { radius: 4, color: "#555", weight: 1, fillColor: "#999", fillOpacity: 0.8 })
+                    .bindTooltip(esc(s.name)).addTo(map);
+            });
+        }
+    }
+
+    /* ---------- mode: new / update / mine ---------- */
+    function setMode(m) {
+        mode = m;
+        $("modeNew").className = "btn " + (m === "new" ? "btn-primary" : "btn-outline-primary");
+        $("modeUpdate").className = "btn " + (m === "update" ? "btn-primary" : "btn-outline-primary");
+        $("modeMine").className = "btn " + (m === "mine" ? "btn-primary" : "btn-outline-primary");
+
+        $("regForm").classList.toggle("d-none", m === "mine");
+        $("minePanel").classList.toggle("d-none", m !== "mine");
+        $("updatePicker").classList.toggle("d-none", m !== "update");
+
+        if (m !== "update") targetSchool = null;
+        if (m === "mine") loadMine();
+        if (m !== "mine" && map) setTimeout(() => map.invalidateSize(), 50);
+        refreshVerify();
+    }
+    $("modeNew").addEventListener("click", () => setMode("new"));
+    $("modeUpdate").addEventListener("click", () => setMode("update"));
+    $("modeMine").addEventListener("click", () => setMode("mine"));
+
+    $("pickSchool").addEventListener("input", function () {
+        const q = this.value.trim().toLowerCase();
+        const s = schools.find(x => x.name.trim().toLowerCase() === q);
+        if (!s) { targetSchool = null; return; }
+        targetSchool = s;
+        $("fName").value = s.name;
+        $("fLevel").value = s.level;
+        $("fOwner").value = s.ownership;
+        $("fType").value = s.type || "";
+        setPoint(s.latitude, s.longitude, "typed", null, true);
+        $("pickInfo").textContent = "Loaded the current details of " + s.name + ". Change what is wrong or out of date.";
+    });
+
+    /* ---------- map + location ---------- */
+    function initMap() {
+        if (map) return;
+        map = L.map("regMap").setView(LILONGWE, 11);
+
+        const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+        }).addTo(map);
+        const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+            maxZoom: 19, attribution: "Tiles &copy; Esri"
+        });
+        L.control.layers({ "OpenStreetMap": osm, "Satellite": sat }).addTo(map);
+
+        map.on("click", function (e) {
+            if (!picking) return;
+            setPoint(e.latlng.lat, e.latlng.lng, "map", null, false);
+            setPicking(false);
+        });
+    }
+
+    function setPicking(on) {
+        picking = on;
+        $("regMap").classList.toggle("picking", on);
+        $("pickBtn").className = "btn btn-sm " + (on ? "btn-primary" : "btn-outline-primary");
+        $("pickBtn").innerHTML = on
+            ? '<i class="bi bi-cursor-fill"></i> Now click the school on the map...'
+            : '<i class="bi bi-cursor"></i> Select location on the map';
+    }
+    $("pickBtn").addEventListener("click", function () {
+        setPicking(!picking);
+        if (picking) $("regMap").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    function setPoint(lat, lng, method, accuracy, pan) {
+        $("fLat").value = Number(lat).toFixed(6);
+        $("fLng").value = Number(lng).toFixed(6);
+        locMethod = method;
+        gpsAcc = accuracy;
+
+        if (map) {
+            if (!pin) {
+                pin = L.marker([lat, lng], { draggable: true }).addTo(map);
+                pin.on("dragend", function () {
+                    const p = pin.getLatLng();
+                    $("fLat").value = p.lat.toFixed(6);
+                    $("fLng").value = p.lng.toFixed(6);
+                    locMethod = "map";
+                    gpsAcc = null;
+                    refreshVerify();
+                });
+            } else {
+                pin.setLatLng([lat, lng]);
+            }
+            if (pan) map.setView([lat, lng], Math.max(map.getZoom(), 17));
+        }
+        refreshVerify();
+    }
+
+    function onTyped() {
+        const lat = parseFloat($("fLat").value);
+        const lng = parseFloat($("fLng").value);
+        locMethod = "typed";
+        gpsAcc = null;
+        if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+            setPoint(lat, lng, "typed", null, true);
+        } else {
+            refreshVerify();
+        }
+    }
+    $("fLat").addEventListener("change", onTyped);
+    $("fLng").addEventListener("change", onTyped);
+
+    $("gpsBtn").addEventListener("click", function () {
+        if (!navigator.geolocation) {
+            return say($("formMsg"), "Your browser does not support GPS location. Select the location on the map instead.", "text-danger");
+        }
+        say($("formMsg"), "Getting your location... please allow location access if the browser asks.", "text-muted");
+        $("gpsBtn").disabled = true;
+
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            $("gpsBtn").disabled = false;
+            say($("formMsg"), "");
+            setPoint(pos.coords.latitude, pos.coords.longitude, "gps", pos.coords.accuracy, true);
+        }, function (err) {
+            $("gpsBtn").disabled = false;
+            const msg = err.code === 1 ? "Location access was blocked. Allow it in your browser settings, or select the location on the map."
+                : err.code === 3 ? "Getting your location took too long. Move outdoors and try again, or select the location on the map."
+                : "Your location is not available. Select the location on the map instead.";
+            say($("formMsg"), msg, "text-danger");
+        }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    });
+
+    /* ---------- location verification ---------- */
+    function checkLocation() {
+        const lat = parseFloat($("fLat").value);
+        const lng = parseFloat($("fLng").value);
+        const r = { entered: !(isNaN(lat) || isNaN(lng)), valid: false, inCity: false, dup: null, dupM: 0, ok: false, lat: lat, lng: lng };
+
+        if (!r.entered) return r;
+        r.valid = Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+        if (!r.valid) return r;
+
+        r.inCity = ring ? inRing(lng, lat, ring) : false;
+
+        let best = null, bestKm = Infinity;
+        schools.forEach(function (s) {
+            if (targetSchool && s.id === targetSchool.id) return;
+            const d = haversineKm(lat, lng, s.latitude, s.longitude);
+            if (d < bestKm) { bestKm = d; best = s; }
+        });
+        if (best && bestKm < DUP_KM) { r.dup = best; r.dupM = Math.round(bestKm * 1000); }
+
+        r.ok = r.valid && r.inCity && !r.dup;
+        return r;
+    }
+
+    function line(kind, html) {
+        const icon = kind === "ok" ? '<i class="bi bi-check-circle-fill text-success"></i>'
+            : kind === "bad" ? '<i class="bi bi-x-circle-fill text-danger"></i>'
+            : kind === "warn" ? '<i class="bi bi-exclamation-triangle-fill text-warning"></i>'
+            : '<i class="bi bi-dash-circle text-muted"></i>';
+        return '<div class="check-line mb-1">' + icon + " " + html + "</div>";
+    }
+
+    function refreshVerify() {
+        const r = checkLocation();
+        let h = '<div class="fw-bold small mb-1">Location verification</div>';
+
+        if (!r.entered) {
+            h += line("info", "Use GPS or the map to set the location, then it is checked automatically.");
+        } else {
+            h += line(r.valid ? "ok" : "bad", r.valid ? "Coordinates are valid." : "Coordinates are not valid (latitude -90 to 90, longitude -180 to 180).");
+            if (r.valid) {
+                if (!ring) h += line("bad", "The Lilongwe City boundary could not be loaded, so the location cannot be verified. Reload the page.");
+                else h += line(r.inCity ? "ok" : "bad", r.inCity ? "Inside the Lilongwe City boundary." : "<b>Outside the Lilongwe City boundary.</b> Only schools inside Lilongwe City can be submitted.");
+                if (r.dup) h += line("bad", "<b>Duplicate location:</b> " + esc(r.dup.name) + " is already registered about " + r.dupM + " m from this point.");
+                else h += line("ok", "No other school is registered within " + Math.round(DUP_KM * 1000) + " m.");
+                if (locMethod === "gps") {
+                    const a = gpsAcc != null ? Math.round(gpsAcc) : null;
+                    h += line(a != null && a > 100 ? "warn" : "ok", "Location taken from GPS" + (a != null ? " (accuracy about " + a + " m)" : "") +
+                        (a != null && a > 100 ? ". The accuracy is low; move outdoors and try again, or adjust the pin on the map." : "."));
+                } else if (locMethod === "map") {
+                    h += line("ok", "Location selected on the map.");
+                }
+            }
+        }
+        $("verifyBox").innerHTML = h;
+        return r;
+    }
+
+    /* ---------- evidence rows ---------- */
+    function addEvRow() {
+        if ($("evRows").children.length >= MAX_FILES) {
+            say($("formMsg"), "You can attach up to " + MAX_FILES + " files.", "text-danger");
+            return;
+        }
+        const row = document.createElement("div");
+        row.className = "ev-row";
+        row.innerHTML =
+            '<div class="d-flex gap-2 mb-2">' +
+            '<select class="form-select form-select-sm ev-type">' +
+            EVIDENCE_TYPES.map(t => "<option>" + esc(t) + "</option>").join("") +
+            "</select>" +
+            '<button type="button" class="btn btn-outline-danger btn-sm ev-remove" title="Remove"><i class="bi bi-x-lg"></i></button>' +
+            "</div>" +
+            '<input type="file" class="form-control form-control-sm ev-file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp">';
+        row.querySelector(".ev-remove").addEventListener("click", function () { row.remove(); });
+        $("evRows").appendChild(row);
+    }
+    $("addEvBtn").addEventListener("click", addEvRow);
+
+    function collectEvidence() {
+        const out = [];
+        let problem = "";
+        $("evRows").querySelectorAll(".ev-row").forEach(function (row) {
+            const f = row.querySelector(".ev-file").files[0];
+            if (!f) return;
+            if (OK_TYPES.indexOf(f.type) === -1) problem = '"' + f.name + '" is not a PDF, JPG, PNG or WEBP file.';
+            else if (f.size > MAX_BYTES) problem = '"' + f.name + '" is larger than 5 MB.';
+            out.push({ file: f, category: row.querySelector(".ev-type").value });
+        });
+        return { items: out, problem: problem };
+    }
+
+    /* ---------- submit ---------- */
+    $("regForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const msg = $("formMsg");
+
+        const name = $("fName").value.trim();
+        const r = refreshVerify();
+        const ev = collectEvidence();
+
+        if (mode === "update" && !targetSchool) return say(msg, "Choose the school you want to update.", "text-danger");
+        if (!name) return say(msg, "Enter the school name.", "text-danger");
+        if (!r.entered) return say(msg, "Set the school location using GPS or the map.", "text-danger");
+        if (!r.valid) return say(msg, "The coordinates are not valid.", "text-danger");
+        if (!ring) return say(msg, "The city boundary could not be loaded. Reload the page and try again.", "text-danger");
+        if (!r.inCity) return say(msg, "This location is outside the Lilongwe City boundary, so it cannot be submitted.", "text-danger");
+        if (r.dup) return say(msg, 'Duplicate location: "' + r.dup.name + '" is already registered here.', "text-danger");
+        if (ev.problem) return say(msg, ev.problem, "text-danger");
+        if (ev.items.length === 0) return say(msg, "Attach at least one supporting document.", "text-danger");
+        if (!$("fConfirm").checked) return say(msg, "Tick the confirmation box before submitting.", "text-danger");
+
+        const record = {
+            kind: mode === "update" ? "update" : "new",
+            target_school_id: mode === "update" ? targetSchool.id : null,
+            name: name,
+            level: $("fLevel").value,
+            ownership: $("fOwner").value,
+            type: $("fType").value.trim() || null,
+            latitude: r.lat,
+            longitude: r.lng,
+            location_method: locMethod || "typed",
+            gps_accuracy_m: locMethod === "gps" && gpsAcc != null ? Math.round(gpsAcc) : null,
+            notes: $("fNotes").value.trim() || null
+        };
+
+        if (mode === "update") {
+            const same = record.name === targetSchool.name &&
+                record.level === targetSchool.level &&
+                record.ownership === targetSchool.ownership &&
+                (record.type || "") === (targetSchool.type || "") &&
+                Math.abs(record.latitude - targetSchool.latitude) < 0.000001 &&
+                Math.abs(record.longitude - targetSchool.longitude) < 0.000001;
+            if (same) return say(msg, "Nothing has changed. Change at least one detail before submitting an update.", "text-danger");
+        }
+
+        $("submitBtn").disabled = true;
+        const id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : null;
+        if (!id) { $("submitBtn").disabled = false; return say(msg, "Your browser is too old to upload documents. Please use an up-to-date browser.", "text-danger"); }
+        record.id = id;
+
+        const uploaded = [];
+        try {
+            for (let i = 0; i < ev.items.length; i++) {
+                const it = ev.items[i];
+                say(msg, "Uploading document " + (i + 1) + " of " + ev.items.length + "...", "text-muted");
+                const safe = it.file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-80);
+                const path = user.id + "/" + id + "/" + (i + 1) + "-" + safe;
+                const { error } = await sb.storage.from("school-evidence").upload(path, it.file, { contentType: it.file.type, upsert: false });
+                if (error) throw new Error("Could not upload " + it.file.name + ": " + error.message);
+                uploaded.push({ path: path, name: it.file.name, category: it.category, size: it.file.size, type: it.file.type });
+            }
+
+            say(msg, "Sending your submission...", "text-muted");
+            record.evidence = uploaded;
+            const { error } = await sb.from("school_submissions").insert(record);
+            if (error) throw new Error(error.message);
+        } catch (err) {
+            if (uploaded.length) sb.storage.from("school-evidence").remove(uploaded.map(u => u.path));
+            $("submitBtn").disabled = false;
+            return say(msg, err.message, "text-danger");
+        }
+
+        $("submitBtn").disabled = false;
+        resetForm();
+        mineNotice = "Submitted. An education officer will review it. It appears on the public map only after approval.";
+        setMode("mine");
+    });
+
+    function resetForm() {
+        $("regForm").reset();
+        $("fType").value = "Day School";
+        $("evRows").innerHTML = "";
+        addEvRow();
+        targetSchool = null;
+        locMethod = null;
+        gpsAcc = null;
+        if (pin && map) { map.removeLayer(pin); pin = null; }
+        say($("formMsg"), "");
+        $("pickInfo").textContent = "Choose the school, then change what is wrong or out of date.";
+    }
+
+    /* ---------- my submissions ---------- */
+    async function loadMine() {
+        say($("mineMsg"), "Loading...", "text-muted");
+        const { data, error } = await sb.from("school_submissions")
+            .select("*").eq("submitted_by", user.id).order("created_at", { ascending: false });
+        if (error) return say($("mineMsg"), "Could not load your submissions: " + error.message, "text-danger");
+        say($("mineMsg"), mineNotice, "text-success");
+        mineNotice = "";
+
+        if (!data.length) {
+            $("mineList").innerHTML = '<div class="text-muted small">You have not submitted anything yet.</div>';
+            return;
+        }
+
+        $("mineList").innerHTML = data.map(function (s) {
+            const badge = s.status === "approved" ? "bg-success" : s.status === "rejected" ? "bg-danger" : "bg-warning text-dark";
+            const label = s.status === "approved" ? "Approved and published" : s.status === "rejected" ? "Rejected" : "Waiting for review";
+            return '<div class="card shadow-sm"><div class="card-body py-2">' +
+                '<div class="d-flex justify-content-between flex-wrap gap-1">' +
+                "<div><b>" + esc(s.name) + '</b> <span class="text-muted small">(' + (s.kind === "update" ? "update" : "new school") + ")</span></div>" +
+                '<span class="badge ' + badge + '">' + label + "</span></div>" +
+                '<div class="small text-muted">' + esc(s.level) + " | " + esc(s.ownership) + " | " + esc(s.type || "") +
+                " | submitted " + new Date(s.created_at).toLocaleDateString() + "</div>" +
+                (s.review_note ? '<div class="small mt-1"><b>Officer note:</b> ' + esc(s.review_note) + "</div>" : "") +
+                "</div></div>";
+        }).join("");
+    }
+    $("refreshMine").addEventListener("click", loadMine);
+
+    }
+})();
+
+    </script>
+
+</body>
+
+</html>
