@@ -197,7 +197,7 @@ function getMarkerColor(school) {
 // =========================================
 // CREATE CUSTOM ICON
 // =========================================
-function createMarkerIcon(color) {
+function createMarkerIcon(color, letter) {
     const colorMap = {
         blue: "#0d6efd",
         red: "#dc3545",
@@ -206,19 +206,39 @@ function createMarkerIcon(color) {
     };
 
     const hexColor = colorMap[color] || "#6c757d";
+    // dark letter on the light yellow marker, white letter on the others
+    const textColor = color === "yellow" ? "#212529" : "#ffffff";
 
     return L.divIcon({
         html: `<div style="
             background-color: ${hexColor};
-            width: 24px;
-            height: 24px;
+            color: ${textColor};
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             border: 2px solid white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        "></div>`,
-        iconSize: [24, 24],
+            box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font: 700 15px/1 Arial, sans-serif;
+        ">${letter || ""}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
         className: "leaflet-div-icon-school"
     });
+}
+
+// P = Primary, S = Secondary
+function getMarkerLetter(school) {
+    return (school.level || "").toLowerCase().includes("primary") ? "P" : "S";
+}
+
+// Plain-words label, e.g. "Public Primary School"
+function schoolCategoryLabel(school) {
+    const own = (school.ownership || "").trim().toLowerCase() === "private" ? "Private" : "Public";
+    const lvl = (school.level || "").toLowerCase().includes("primary") ? "Primary" : "Secondary";
+    return `${own} ${lvl} School`;
 }
 
 // =========================================
@@ -230,7 +250,7 @@ function addSchoolMarker(school) {
     const color = getMarkerColor(school);
 
     const marker = L.marker(latlng, {
-        icon: createMarkerIcon(color),
+        icon: createMarkerIcon(color, getMarkerLetter(school)),
         title: school.name
     }).addTo(map);
 
@@ -315,10 +335,13 @@ function buildSchoolImage(school) {
 function buildPopupContent(school, idx) {
     const lat = Number(school.latitude).toFixed(6);
     const lng = Number(school.longitude).toFixed(6);
+    const tipColor = { blue: "#0d6efd", red: "#dc3545", orange: "#fd7e14", yellow: "#ffc107" }[getMarkerColor(school)];
+    const tipText = getMarkerColor(school) === "yellow" ? "#212529" : "#ffffff";
 
     return `
         <div style="width:280px">
             ${buildSchoolImage(school)}
+            <div class="mb-1"><span style="display:inline-block;background:${tipColor};color:${tipText};font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px">${escapeHtml(schoolCategoryLabel(school))}</span></div>
             <div class="fw-bold mb-1">${escapeHtml(school.name)}</div>
             <hr class="my-1">
             <div class="small"><strong>Level:</strong> ${escapeHtml(school.level)}</div>
@@ -337,9 +360,12 @@ function buildPopupContent(school, idx) {
 function buildTooltipContent(school) {
     const lat = Number(school.latitude).toFixed(6);
     const lng = Number(school.longitude).toFixed(6);
+    const tipColor = { blue: "#0d6efd", red: "#dc3545", orange: "#fd7e14", yellow: "#ffc107" }[getMarkerColor(school)];
+    const tipText = getMarkerColor(school) === "yellow" ? "#212529" : "#ffffff";
 
     return `
         <div style="min-width:200px">
+            <div class="mb-1"><span style="display:inline-block;background:${tipColor};color:${tipText};font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px">${escapeHtml(schoolCategoryLabel(school))}</span></div>
             <div class="fw-bold mb-1">${escapeHtml(school.name)}</div>
             <div class="small"><strong>Level:</strong> ${escapeHtml(school.level)}</div>
             <div class="small"><strong>Ownership:</strong> ${escapeHtml(school.ownership)}</div>
